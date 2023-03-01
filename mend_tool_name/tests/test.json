@@ -1,0 +1,61 @@
+{
+    "spdxVersion": "SPDX-2.2",
+    "documentNamespace": "http://CreatorWebsite/pathToSpdx/DocumentName-UUID",
+    "creationInfo": {
+        "creators": [
+            "Organization: Organization Name (org@email.address)",
+            "Tool: Mend SBOM Report Generator",
+            "Person: person name (person@email.address)"
+        ],
+        "created": "2022-07-26T12:57:02Z",
+        "licenseListVersion": "3.6"
+    },
+    "dataLicense": "CC0-1.0",
+    "SPDXID": "SPDXRef-DOCUMENT",
+    "name": "",
+    "documentDescribes": [
+        "SPDXRef-PACKAGE-urllib3-1.26.11-py2.py3-none-any.whl"
+    ],
+    "packages": [
+        {
+            "SPDXID": "SPDXRef-PACKAGE-urllib3-1.26.11-py2.py3-none-any.whl",
+            "name": "urllib3",
+            "downloadLocation": "https://files.pythonhosted.org/packages/d1/cb/4783c8f1a90f89e260dbf72ebbcf25931f3a28f8f80e2e90f8a589941b19/urllib3-1.26.11-py2.py3-none-any.whl",
+            "licenseConcluded": "NONE",
+            "licenseInfoFromFiles": [],
+            "licenseDeclared": "NONE",
+            "copyrightText": "NONE",
+            "versionInfo": "1.26.11",
+            "packageFileName": "urllib3-1.26.11-py2.py3-none-any.whl",
+            "supplier": "NOASSERTION",
+            "originator": "NOASSERTION",
+            "checksums": [
+                {
+                    "algorithm": "SHA1",
+                    "checksumValue": "25e6a46e77dd052e06b0a405a6743e4dac65795b"
+                }
+            ],
+            "homepage": "https://files.pythonhosted.org/packages/d1/cb/4783c8f1a90f89e260dbf72ebbcf25931f3a28f8f80e2e90f8a589941b19/urllib3-1.26.11-py2.py3-none-any.whl",
+            "filesAnalyzed": false
+        }
+    ],
+    "hasExtractedLicensingInfos": [
+    ],
+    "relationships": [
+        {
+            "spdxElementId": "SPDXRef-PACKAGE-urllib3-1.26.11-py2.py3-none-any.whl",
+            "relatedSpdxElement": "SPDXRef-DOCUMENT",
+            "relationshipType": "DESCRIBED_BY"
+        },
+        {
+            "spdxElementId": "SPDXRef-DOCUMENT",
+            "relatedSpdxElement": "SPDXRef-PACKAGE-urllib3-1.26.11-py2.py3-none-any.whl",
+            "relationshipType": "DESCRIBES"
+        },
+        {
+            "spdxElementId": "SPDXRef-PACKAGE-requests-2.27.1-py2.py3-none-any.whl",
+            "relatedSpdxElement": "SPDXRef-PACKAGE-urllib3-1.26.11-py2.py3-none-any.whl",
+            "relationshipType": "DEPENDS_ON"
+        }
+    ]
+}
