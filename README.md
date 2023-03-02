@@ -1,8 +1,8 @@
 [![Logo](https://resources.mend.io/mend-sig/logo/mend-dark-logo-horizontal.png)](https://www.mend.io/)  
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-yellowgreen.svg)](https://opensource.org/licenses/Apache-2.0)
-[![CI](https://github.com/whitesource-ps/mend-import-sbom/actions/workflows/ci.yml/badge.svg)](https://github.com/whitesource-ps/mend-import-sbom/actions/workflows/ci.yml/badge.svg)
-[![GitHub release](https://img.shields.io/github/v/release/whitesource-ps/ws-import-sbom)](https://github.com/whitesource-ps/ws-import-sbom/releases/latest)  
+[![CI](https://github.com/mend-toolkit/import-sbom/actions/workflows/ci.yml/badge.svg)](https://github.com/mend-toolkit/import-sbom/actions/workflows/ci.yml/badge.svg)
+[![GitHub release](https://img.shields.io/github/v/release/mend-toolkit/import-sbom)](https://github.com/mend-toolkit/import-sbom/releases/latest)  
 
 # Import SBOM
 
