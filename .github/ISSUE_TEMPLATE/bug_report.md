@@ -1,7 +1,7 @@
 ---
 name: Bug Report
 about: Create a report to help us improve
-title: "[BUG] [mend-tool-name] ISSUE DESCRIPTION"
+title: "[BUG] [import-sbom] ISSUE DESCRIPTION"
 labels: bug
 assignees: ''
 

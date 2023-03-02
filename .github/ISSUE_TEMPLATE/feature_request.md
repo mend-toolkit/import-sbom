@@ -1,7 +1,7 @@
 ---
 name: Feature Request
 about: Suggest an idea for this project
-title: "[FR] [mend-tool-name] FEATURE DESCRIPTION"
+title: "[FR] [import-sbom] FEATURE DESCRIPTION"
 labels: feature request
 assignees: ''
 

@@ -1,5 +1,5 @@
 import setuptools
-from mend_tool_name._version import __version__, __tool_name__, __description__
+from mend_import_sbom._version import __version__, __tool_name__, __description__
 
 mend_name = f"mend_{__tool_name__}"
 

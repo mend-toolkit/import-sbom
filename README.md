@@ -4,20 +4,29 @@
 [![CI](https://github.com/whitesource-ps/mend-import-sbom/actions/workflows/ci.yml/badge.svg)](https://github.com/whitesource-ps/mend-import-sbom/actions/workflows/ci.yml/badge.svg)
 [![GitHub release](https://img.shields.io/github/v/release/whitesource-ps/ws-import-sbom)](https://github.com/whitesource-ps/ws-import-sbom/releases/latest)  
 
-# TOOL NAME
+# Import SBOM
 
-TOOL DESCRIPTION  
+A CLI tool that imports a project inventory into Mend from a SBOM report in the [SPDX](https://spdx.org) format or CSV format.  
 
+The tool can either upload data directly to Mend, or alternatively, create a Mend Offline Request file that can be uploaded separately using one of the following methods:
+- Using the Mend Unified Agent (see [Uploading an Offline Request File](https://docs.mend.io/bundle/unified_agent/page/scanning_with_the_unified_agent_in_offline_mode.html#Uploading-an-Offline-Request-File))
+- Via Mend's UI (**Admin** >> **Upload Update Request**)
+- Using Mend's API (see [Uploading Update Requests via the Mend API](https://docs.mend.io/bundle/wsk/page/uploading_update_requests_via_the_mend_api.html))
+
+The tool supports input files in either **JSON** or **CSV** formats.  
 <hr>
 
 - [Supported Operating Systems](#supported-operating-systems)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-- [Configuration Parameters](#configuration-parameters)
 - [Usage](#usage)
-- [Execution Examples](#execution-examples)
-- [Other Section](#other-section)
-  - [Other Subsection](#other-subsection)
+- [Configuration Parameters](#configuration-parameters)
+- [Importing SPDX SBOM (JSON)](#importing-spdx-sbom-json)
+  - [Imported File Structure](#imported-file-structure)
+  - [Execution Examples](#execution-examples)
+- [Importing CSV SBOM](#importing-csv-sbom)
+  - [Imported File Structure](#imported-file-structure-1)
+  - [Execution Examples](#execution-examples-1)
 
 <hr>
 
@@ -31,9 +40,24 @@ TOOL DESCRIPTION
 
 ## Installation
 ```
-$ pip install mend-TOOL-NAME
+$ pip install mend-import-sbom
 ```
 > **Note:** Depending on whether the package was installed as a root user or not, you need to make sure the package installation location was added to the `$PATH` environment variable.
+
+## Usage
+**Using command-line arguments only:**
+```shell
+import_sbom --user-key WS_USERKEY --api-key WS_APIKEY --url $WS_WSS_URL --input $SBOM_FILE_PATH --scope "ProductName//ProjectName" --dir $OUTPUT_DIRECTORY
+```
+**Using environment variables:**
+```shell
+export WS_USERKEY=xxxxxxxxxxx
+export WS_APIKEY=xxxxxxxxxxx
+export WS_WSS_URL=https://saas.mend.io
+
+import_sbom --input $SBOM_FILE_PATH --scope "ProductName//ProjectName"
+```
+> **Note:** Either form is accepted. For the rest of the examples, the latter form would be used  
 
 ## Configuration Parameters
 >**Note:** Parameters can be specified as either command-line arguments, environment variables, or a combination of both.  
@@ -63,22 +87,31 @@ $ pip install mend-TOOL-NAME
 > ** See more details about the [update-request.txt](https://docs.mend.io/bundle/wsk/page/does_mend_have_the_ability_to_scan_when_offline_and_then_upload_the_scan_results_when_online_.html) file and [Offline mode](https://docs.mend.io/csh?context=2524153159&topicname=unified_agent_-_advanced_topics.html#Scanning-in-Offline-Mode)  in Mend's documentation.  
 
 
-## Usage
-**Using command-line arguments only:**
-```shell
-import_sbom --user-key WS_USERKEY --api-key WS_APIKEY --url $WS_WSS_URL --input $SBOM_FILE_PATH --scope "ProductName//ProjectName" --dir $OUTPUT_DIRECTORY
-```
-**Using environment variables:**
-```shell
-export WS_USERKEY=xxxxxxxxxxx
-export WS_APIKEY=xxxxxxxxxxx
-export WS_WSS_URL=https://saas.mend.io
+## Importing SPDX SBOM (JSON)
 
-import_sbom --input $SBOM_FILE_PATH --scope "ProductName//ProjectName"
-```
-> **Note:** Either form is accepted. For the rest of the examples, the latter form would be used  
+### Imported File Structure
+The SPDX document must correspond to the [Composition of an SPDX document](https://spdx.github.io/spdx-spec/v2.3/composition-of-an-SPDX-document) specification.
 
-## Execution Examples
+The following table describes the set of properties for each imported library:
+
+| Property                 | Required | Description                                                                                                              |
+|:-------------------------|:--------:|:-------------------------------------------------------------------------------------------------------------------------|
+| **name**                 |    No    | [File Name](https://spdx.github.io/spdx-spec/v2.3/file-information/#81-file-name-field)                                  |
+| **downloadLocation**     |    No    | [Download Location](https://spdx.github.io/spdx-spec/v2.3/package-information/#77-package-download-location-field)       |
+| **licenseConcluded**     |    No    | [License Concluded](https://spdx.github.io/spdx-spec/v2.3/package-information/#713-concluded-license-field)              |
+| **licenseInfoFromFiles** |    No    | [License Info](https://spdx.github.io/spdx-spec/v2.3/package-information/#714-all-licenses-information-from-files-field) |
+| **licenseDeclared**      |    No    | [License Declared](https://spdx.github.io/spdx-spec/v2.3/package-information/#715-declared-license-field)                |
+| **copyrightText**        |    No    | [Copyright Text](https://spdx.github.io/spdx-spec/v2.3/package-information/#717-copyright-text-field)                    |
+| **versionInfo**          |   Yes*   | [Version Info](https://spdx.github.io/spdx-spec/v2.3/package-information/#73-package-version-field)                      |
+| **packageFileName**      |   Yes*   | [Package Name](https://spdx.github.io/spdx-spec/v2.3/package-information/#74-package-file-name-field)                    |
+| **supplier**             |    No    | [Supplier](https://spdx.github.io/spdx-spec/v2.3/package-information/#75-package-supplier-field)                         |
+| **originator**           |    No    | [Originator](https://spdx.github.io/spdx-spec/v2.3/package-information/#76-package-originator-field)                     |
+| **sha1**                 |   Yes*   | [SHA1](https://spdx.github.io/spdx-spec/v2.3/package-information/#710-package-checksum-field)                            |
+| **homepage**             |    No    | [Home Page](https://spdx.github.io/spdx-spec/v2.3/package-information/#711-package-home-page-field)                      |
+
+> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair. 
+
+### Execution Examples
 
 > **Note:** In the following examples, $WS_USERKEY, $WS_APIKEY and $WS_WSS_URL are assumed to have been exported as environment variables.  
 
@@ -110,8 +143,43 @@ $ import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --i
 $ import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True --updateType APPEND
 ```
 
-## Other Section
+## Importing CSV SBOM
 
-### Other Subsection
-Details  
+### Imported File Structure
 
+[Download CSV Template](./templates/import_template.csv)
+
+| Header               | Required | Reference                                                                                                                |
+|:---------------------|:---------|:-------------------------------------------------------------------------------------------------------------------------|
+| name                 | No       | [File Name](https://spdx.github.io/spdx-spec/v2.3/file-information/#81-file-name-field)                                  |
+| downloadLocation     | No       | [Download Location](https://spdx.github.io/spdx-spec/v2.3/package-information/#77-package-download-location-field)       |
+| licenseConcluded     | No       | [License Concluded](https://spdx.github.io/spdx-spec/v2.3/package-information/#713-concluded-license-field)              |
+| licenseInfoFromFiles | No       | [License Info](https://spdx.github.io/spdx-spec/v2.3/package-information/#714-all-licenses-information-from-files-field) |
+| licenseDeclared      | No       | [License Declared](https://spdx.github.io/spdx-spec/v2.3/package-information/#715-declared-license-field)                |
+| copyrightText        | No       | [Copyright Text](https://spdx.github.io/spdx-spec/v2.3/package-information/#717-copyright-text-field)                    |
+| versionInfo          | Yes*     | [Version Info](https://spdx.github.io/spdx-spec/v2.3/package-information/#73-package-version-field)                      |
+| packageFileName      | Yes*     | [Package Name](https://spdx.github.io/spdx-spec/v2.3/package-information/#74-package-file-name-field)                    |
+| supplier             | No       | [Supplier](https://spdx.github.io/spdx-spec/v2.3/package-information/#75-package-supplier-field)                         |
+| originator           | No       | [Originator](https://spdx.github.io/spdx-spec/v2.3/package-information/#76-package-originator-field)                     |
+| sha1                 | Yes*     | [SHA1](https://spdx.github.io/spdx-spec/v2.3/package-information/#710-package-checksum-field)                            |
+| homepage             | No       | [Home Page](https://spdx.github.io/spdx-spec/v2.3/package-information/#711-package-home-page-field)                      |
+
+> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair. Other fields can remain empty.
+
+### Execution Examples
+
+> **Note:** In the following examples, $WS_USERKEY, $WS_APIKEY and $WS_WSS_URL are assumed to have been exported as environment variables.
+
+Import CSV SBOM into a new Mend project under the default product (`Mend-Imports`)
+
+```shell
+$ import_sbom --scope "$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv
+```
+
+Import CSV SBOM, appending to an existing Mend project
+
+```shell
+$ import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND 
+
+$ import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND
+```
