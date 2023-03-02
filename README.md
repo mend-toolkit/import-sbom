@@ -16,17 +16,17 @@ The tool can either upload data directly to Mend, or alternatively, create a Men
 The tool supports input files in either **JSON** or **CSV** formats.  
 <hr>
 
-- [Supported Operating Systems](#supported-operating-systems)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Configuration Parameters](#configuration-parameters)
-- [Importing SPDX SBOM (JSON)](#importing-spdx-sbom-json)
-  - [Imported File Structure](#imported-file-structure)
-  - [Execution Examples](#execution-examples)
-- [Importing CSV SBOM](#importing-csv-sbom)
-  - [Imported File Structure](#imported-file-structure-1)
-  - [Execution Examples](#execution-examples-1)
+- [Import SBOM](#import-sbom)
+  - [Supported Operating Systems](#supported-operating-systems)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Usage](#usage)
+  - [Importing SPDX SBOM (JSON)](#importing-spdx-sbom-json)
+    - [Imported File Structure](#imported-file-structure)
+    - [Execution Examples](#execution-examples)
+  - [Importing CSV SBOM](#importing-csv-sbom)
+    - [Imported File Structure](#imported-file-structure-1)
+    - [Execution Examples](#execution-examples-1)
 
 <hr>
 
@@ -39,15 +39,15 @@ The tool supports input files in either **JSON** or **CSV** formats.
 - Mend user with admin permissions
 
 ## Installation
-```
-$ pip install mend-import-sbom
+```shell
+pip install mend-import-sbom
 ```
 > **Note:** Depending on whether the package was installed as a root user or not, you need to make sure the package installation location was added to the `$PATH` environment variable.
 
 ## Usage
 **Using command-line arguments only:**
 ```shell
-import_sbom --user-key WS_USERKEY --api-key WS_APIKEY --url $WS_WSS_URL --input $SBOM_FILE_PATH --scope "ProductName//ProjectName" --dir $OUTPUT_DIRECTORY
+import_sbom --user-key $WS_USERKEY --api-key $WS_APIKEY --url $WS_WSS_URL --input $SBOM_FILE_PATH --scope "ProductName//ProjectName" --dir $OUTPUT_DIRECTORY
 ```
 **Using environment variables:**
 ```shell
@@ -118,29 +118,29 @@ The following table describes the set of properties for each imported library:
 Import SPDX SBOM into a new Mend project
 
 ```shell
-$ import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME-sbom.json
+import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME-sbom.json
 ```
 
 Convert SPDX SBOM to an [offline update request](https://docs.mend.io/bundle/wsk/page/understanding_update_requests.html) file for creating a new Mend project under a specific product
 
 ```shell
-$ import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True
+import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True
 ```
 
 Convert SPDX SBOM to an [offline update request](https://docs.mend.io/bundle/wsk/page/understanding_update_requests.html) file for overriding an existing Mend project
 
 ```shell
-$ import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True
+import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True
 
-$ import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True
+import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True
 ```
 
 Convert SPDX SBOM to an [offline update request](https://docs.mend.io/bundle/wsk/page/understanding_update_requests.html) file for appending to an existing Mend project
 
 ```shell
-$ import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True --updateType APPEND
+import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True --updateType APPEND
 
-$ import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True --updateType APPEND
+import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/my-project-sbom.json --offline True --updateType APPEND
 ```
 
 ## Importing CSV SBOM
@@ -173,13 +173,13 @@ $ import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports
 Import CSV SBOM into a new Mend project under the default product (`Mend-Imports`)
 
 ```shell
-$ import_sbom --scope "$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv
+import_sbom --scope "$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv
 ```
 
 Import CSV SBOM, appending to an existing Mend project
 
 ```shell
-$ import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND 
+import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND 
 
-$ import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND
+import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND
 ```
