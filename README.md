@@ -109,7 +109,9 @@ The following table describes the set of properties for each imported library:
 | **sha1**                 |   Yes*   | [SHA1](https://spdx.github.io/spdx-spec/v2.3/package-information/#710-package-checksum-field)                            |
 | **homepage**             |    No    | [Home Page](https://spdx.github.io/spdx-spec/v2.3/package-information/#711-package-home-page-field)                      |
 
-> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair. 
+> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair.  
+> 
+>    **Note:** If **sha1** isn't provided for a particular library, the tool will attempt to search that library by its name and version in Mend's index, which will result in longer execution times.  
 
 ### Execution Examples
 
@@ -164,7 +166,9 @@ import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/m
 | sha1                 | Yes*     | [SHA1](https://spdx.github.io/spdx-spec/v2.3/package-information/#710-package-checksum-field)                            |
 | homepage             | No       | [Home Page](https://spdx.github.io/spdx-spec/v2.3/package-information/#711-package-home-page-field)                      |
 
-> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair. Other fields can remain empty.
+> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair. Other fields can remain empty.  
+> 
+>    **Note:** If **sha1** isn't provided for a particular library, the tool will attempt to search that library by its name and version in Mend's index, which will result in longer execution times.  
 
 ### Execution Examples
 
