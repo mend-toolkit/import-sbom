@@ -70,7 +70,7 @@ import_sbom --input $SBOM_FILE_PATH --scope "ProductName//ProjectName"
 | **&#x2011;&#x2011;user-key**   | `WS_USERKEY`    | `string` |   Yes    | Mend User Key                                                                            |
 | **&#x2011;&#x2011;api-key**    | `WS_APIKEY`     | `string` |   Yes    | Mend API Key                                                                             |
 | **&#x2011;&#x2011;url**        | `WS_WSS_URL`    | `string` |   Yes    | Mend Server URL                                                                          |
-| **&#x2011;&#x2011;input**      |                 | `string` |   Yes    | SBOM report file to import (`*.json` or `*.csv`)                                         |
+| **&#x2011;&#x2011;input**      | `SBOM`          | `string` |   Yes    | SBOM report file to import (`*.json` or `*.csv`)                                         |
 | **&#x2011;&#x2011;scope**      | `WS_SCOPE`      | `string` |   No*    | Product and Project names to create/update. Expected format: `"PRODUCT//PROJECT"`        |
 | **&#x2011;&#x2011;updateType** | `WS_UPDATETYPE` | `string` |    No    | APPEND or OVERRIDE results when importing into an existing project (default: `OVERRIDE`) |
 | **&#x2011;&#x2011;dir**        |                 | `string` |    No    | Output directory for the `update-request.txt` file** in Offline mode (default: `$PWD`)   |
