@@ -9,6 +9,8 @@ import sys
 import http.client
 import re
 import hashlib
+import concurrent
+from concurrent.futures import ThreadPoolExecutor
 from ws_sdk import web, WS
 
 from mend_import_sbom._version import __version__, __tool_name__, __description__
@@ -29,6 +31,7 @@ APP_TITLE = "Mend SBOM Importer"
 DFLT_PRD_NAME = "Mend-Imports"
 UPDATE_REQUEST_FILE = "update-request.txt"
 PROJ_URL = '/Wss/WSS.html#!project;id='  # f'{WS_WSS_URL}/Wss/WSS.html#!project;id={PROJECT_ID}'
+PROJECT_PARALLELISM_LEVEL = len(SHA1CalcType)
 
 
 def try_or_error(supplier, msg):
@@ -174,6 +177,36 @@ def csv_to_json(csv_file):
 
 
 def create_body(args):
+    def generic_thread_pool_search(lib_name: str, lib_ver : str, l_types : list, worker: callable) :
+    # Stay it for future possible parallel runs
+        def get_value_by_key(key_ : str) :
+            combined_d = {key: value for d in l_types for key, value in d.items()}
+            return combined_d[key_]
+
+        sha1 = ""
+        lname = ""
+        value = ""
+        err = 0
+        err_msg = ""
+        pkg_name_list = set().union(*(d.keys() for i, d in enumerate(l_types) if i < 7))
+        with ThreadPoolExecutor(max_workers=PROJECT_PARALLELISM_LEVEL) as executer:
+            futures = [executer.submit(worker, lib_name, lib_ver, l_type_, get_value_by_key(l_type_)) for l_type_ in pkg_name_list]
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    sha1_, lname_, err_, err_msg_, value_ = future.result()
+                    if sha1_:
+                        sha1 = sha1_
+                        lname = lname_
+                        value = value_
+                        err = err_
+                        err_msg = err_msg_
+                except Exception as e:
+                    logger.error(f"Error on future: {future.result()}. Error message: {e}")
+                    SystemExit()
+
+        return sha1, lname, err, err_msg, value
+
     def create_add_sha1(langtype=""):  # maybe we will need to calculate additional sha1 later
         logger.debug(f'[{fn()}] langtype={langtype}')
         pkg_str = ""
@@ -324,16 +357,18 @@ def create_body(args):
 
             sha1_ = ""
             res_err_msg = ""
+            logger.info(f'[{fn()}] Mend library search: {pkg_id}')
             for l_type in lang_types:
                 for key, value in l_type.items():
                     if pkg_ver:
-                        logger.info(f'[{fn()}] Mend library search: {pkg_id}')
                         sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pkg_name, lib_ver=pkg_ver, lib_type=key)
                         res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
                     else:
                         sha1_ = ""
                         lname_ = ""
                         err_msg_ = ""
+            # The start parallel running
+            #sha1_, lname_, err_, err_msg_, value = generic_thread_pool_search(lib_name=pkg_name,lib_ver=pkg_ver,l_types=lang_types,worker=search_lib_by_name)
                 if sha1_ != "":
                     pck = {
                         "artifactId": f"{lname_}",
@@ -348,10 +383,10 @@ def create_body(args):
                         "dependencyFile": ""
                     }
                     break
+
             if sha1_ == "" and pkg_name != "NOASSERTION":
                 logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else err_msg_}")
 
-        # if not check_el_inlist(pkg_name) and pck != {}:
         if pck != {}:
             if pkg_name not in added_el:
                 added_el.append(f"{pkg_name}")  # we add element to list if was not added before

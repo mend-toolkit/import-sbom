@@ -45,23 +45,23 @@ class SHA1CalcType(Enum):  # list with supported packages
     # cargo = ("n","Crate","crate") #crate
     # opam = ("n","Opam","opam") #opam
     maven = ("y", "JAVA", "jar", "maven")  # jar
-    pypi = ("n", "PYTHON", "whl", "pypi")  # whl
     npm = ("y", "NPM", "js", "npm", "npm")  # js
     cdnjs = ("y", "CDNJS", "js", "cdnjs")  # js
+    pypi = ("n", "PYTHON", "whl", "pypi")  # whl
     dotnet = ("y", "NUGET", "exe", ".net")  # exe
-    bower = ("y", "BOWER", "jar", "bower")  # jar
-    ocaml = ("n", "Opam", "ml", "ocaml")  # ml
-    go = ("n", "GO", "go", "go")  # go
     nuget = ("y", "NUGET", "ng", "nuget")  # ng
-    rpm = ("n", "RPM", "rpm", "rpm")  # rpm
-    composer = ("n", "PHP", "php", "php")  # php
+    go = ("n", "GO", "go", "go")  # go
     cocoapods = ("n", "CocoaPods", "pod", "cocoapods")
-    cran = ("n", "R", "r", "r")  # r
     gem = ("y", "RUBY", "gem", "ruby")  # gem
+    composer = ("n", "PHP", "php", "php")  # php
+    alpine = ("n", "Alpine", "apk", "alpine")
+    rpm = ("n", "RPM", "rpm", "rpm")  # rpm
+    ocaml = ("n", "Opam", "ml", "ocaml")  # ml
+    cran = ("n", "R", "r", "r")  # r
     rust = ("y", "RUST", "rs", "rust")  # rs
     rlib = ("y", "RUST", "rlib", "rust")  # rlib
     hex = ("y", "HEX", "hex", "hex", "hex")  # hex, h86
-    alpine = ("n", "Alpine", "apk", "alpine")
+    bower = ("y", "BOWER", "jar", "bower")  # jar
 
     @property
     def lower_case(self):
