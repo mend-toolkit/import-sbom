@@ -367,9 +367,9 @@ def create_body(args):
                         sha1_ = ""
                         lname_ = ""
                         err_msg_ = ""
-            # The start parallel running
+            # The start parallel running. Keep it for future
             #sha1_, lname_, err_, err_msg_, value = generic_thread_pool_search(lib_name=pkg_name,lib_ver=pkg_ver,l_types=lang_types,worker=search_lib_by_name)
-                if sha1_ != "":
+                if sha1_:
                     pck = {
                         "artifactId": f"{lname_}",
                         "version": pkg_ver,
