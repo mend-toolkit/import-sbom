@@ -56,4 +56,3 @@ local-env.*
 local.params.config
 .DS_Store
 update-request.txt
-/Output/
