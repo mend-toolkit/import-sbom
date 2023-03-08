@@ -9,6 +9,8 @@ import sys
 import http.client
 import re
 import hashlib
+import concurrent
+from concurrent.futures import ThreadPoolExecutor
 from ws_sdk import web, WS
 
 from mend_import_sbom._version import __version__, __tool_name__, __description__
@@ -29,6 +31,7 @@ APP_TITLE = "Mend SBOM Importer"
 DFLT_PRD_NAME = "Mend-Imports"
 UPDATE_REQUEST_FILE = "update-request.txt"
 PROJ_URL = '/Wss/WSS.html#!project;id='  # f'{WS_WSS_URL}/Wss/WSS.html#!project;id={PROJECT_ID}'
+PROJECT_PARALLELISM_LEVEL = len(SHA1CalcType)
 
 
 def try_or_error(supplier, msg):
@@ -174,6 +177,36 @@ def csv_to_json(csv_file):
 
 
 def create_body(args):
+    def generic_thread_pool_search(lib_name: str, lib_ver : str, l_types : list, worker: callable) :
+    # Stay it for future possible parallel runs
+        def get_value_by_key(key_ : str) :
+            combined_d = {key: value for d in l_types for key, value in d.items()}
+            return combined_d[key_]
+
+        sha1 = ""
+        lname = ""
+        value = ""
+        err = 0
+        err_msg = ""
+        pkg_name_list = set().union(*(d.keys() for i, d in enumerate(l_types) if i < 7))
+        with ThreadPoolExecutor(max_workers=PROJECT_PARALLELISM_LEVEL) as executer:
+            futures = [executer.submit(worker, lib_name, lib_ver, l_type_, get_value_by_key(l_type_)) for l_type_ in pkg_name_list]
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    sha1_, lname_, err_, err_msg_, value_ = future.result()
+                    if sha1_:
+                        sha1 = sha1_
+                        lname = lname_
+                        value = value_
+                        err = err_
+                        err_msg = err_msg_
+                except Exception as e:
+                    logger.error(f"Error on future: {future.result()}. Error message: {e}")
+                    SystemExit()
+
+        return sha1, lname, err, err_msg, value
+
     def create_add_sha1(langtype=""):  # maybe we will need to calculate additional sha1 later
         logger.debug(f'[{fn()}] langtype={langtype}')
         pkg_str = ""
@@ -208,6 +241,44 @@ def create_body(args):
                     break
         except:
             pass
+        return res
+
+    def execute_pack_exe_list(package_list : list, exts : list): # Execute whole list of missed packages
+        res = []
+        for pck_ in package_list:
+            for pck_name, pck_ver in pck_.items():
+                logger.info(f'[{fn()}] Mend library search: {f"{pck_name}-{pck_ver}" if pck_ver else pck_name}')
+                res_err_msg = ""
+                br = False
+                for ext_ in exts:
+                    for key, value in ext_.items():
+                        if pkg_ver:
+                            sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pck_name, lib_ver=pck_ver, lib_type=key)
+                            res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
+                        else:
+                            sha1_ = ""
+                            lname_ = ""
+                            err_msg_ = ""
+                        # The start parallel running. Keep it for future
+                        #sha1_, lname_, err_, err_msg_, value = generic_thread_pool_search(lib_name=pkg_name,lib_ver=pkg_ver,l_types=lang_types,worker=search_lib_by_name)
+                        if sha1_:
+                            res.append( {
+                                "artifactId": f"{lname_}",
+                                "version": pkg_ver,
+                                "sha1": sha1_,
+                                "systemPath": "",
+                                "optional": False,
+                                "filename": f"{lname_}-{pkg_ver}.{value}",
+                                "checksums": {
+                                    "SHA1": sha1_
+                                },
+                                "dependencyFile": ""
+                            })
+                            br = True
+                    if br:
+                        break
+                if "NOASSERTION" not in pck_name and not sha1_:
+                    logger.info(f"Library not found: {f'{pck_name}-{pck_ver}' if pck_ver else pck_name}. {res_err_msg if res_err_msg else err_msg_}")
         return res
 
     def search_lib_by_name(lib_name, lib_ver, lib_type):
@@ -263,14 +334,16 @@ def create_body(args):
         for rel_ in sbom["relationships"]:
             if rel_['relationshipType'] == "DEPENDS_ON":
                 relations.append({rel_['spdxElementId']: rel_['relatedSpdxElement']})
-    except AttributeError as err_a:
+    except Exception: # Using standard Exception. In other case we will get new raise error here
         logger.debug(f'[{fn()}] "relationships" block not found, skipping')
 
     pkgs = try_or_error(lambda: sbom["packages"], sbom)  # from JSON or from CSV
     logger.debug(f'[{fn()}] Adding dependencies')
+    pack_exe_list = []
     for package in pkgs:
         sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}", '')
-        pkg_name = try_or_error(lambda: package["packageFileName"], package["name"])
+        pkg_name = try_or_error(lambda: package["packageFileName"], package["name"]).split(" ")
+        pkg_name = (' '.join(str(x) for x in pkg_name)).replace(" ","-")
         pkg_ver = try_or_error(lambda: package['versionInfo'], '')
         pkg_id = f'{pkg_name}-{pkg_ver}' if pkg_ver else pkg_name
 
@@ -287,8 +360,11 @@ def create_body(args):
                 },
                 "dependencyFile": ""
             }
+            if pkg_name not in added_el:
+                added_el.append(pkg_name)  # we add element to list if was not added before
+                dep.append(add_child(pck))
+                logger.debug(f'[{fn()}] Dependency added: {pkg_id}, sha1: {sha1}')
         else:  # SHA1 not found
-            pck = {}
             lang_types = []
             logger.debug(f'[{fn()}] Attempting to resolve library by language type')
             try:
@@ -324,42 +400,52 @@ def create_body(args):
 
             sha1_ = ""
             res_err_msg = ""
-            for l_type in lang_types:
-                for key, value in l_type.items():
-                    if pkg_ver:
-                        logger.info(f'[{fn()}] Mend library search: {pkg_id}')
-                        sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pkg_name, lib_ver=pkg_ver, lib_type=key)
-                        res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
-                    else:
-                        sha1_ = ""
-                        lname_ = ""
-                        err_msg_ = ""
-                if sha1_ != "":
-                    pck = {
-                        "artifactId": f"{lname_}",
-                        "version": pkg_ver,
-                        "sha1": sha1_,
-                        "systemPath": "",
-                        "optional": False,
-                        "filename": f"{lname_}-{pkg_ver}.{value}",
-                        "checksums": {
-                            "SHA1": sha1_
-                        },
-                        "dependencyFile": ""
-                    }
-                    break
-            if sha1_ == "" and pkg_name != "NOASSERTION":
-                logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else err_msg_}")
+            err_msg_ = ""
+            pck = {}
+            if len(lang_types) < len(SHA1CalcType): # Extension was found
+                logger.info(f'[{fn()}] Mend library search: {pkg_id}')
+                for l_type in lang_types:
+                    for key, value in l_type.items():
+                        if pkg_ver:
+                            sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pkg_name, lib_ver=pkg_ver, lib_type=key)
+                            res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
+                        else:
+                            sha1_ = ""
+                            lname_ = ""
+                            err_msg_ = ""
+                    if sha1_:
+                        pck = {
+                            "artifactId": f"{lname_}",
+                            "version": pkg_ver,
+                            "sha1": sha1_,
+                            "systemPath": "",
+                            "optional": False,
+                            "filename": f"{lname_}-{pkg_ver}.{value}",
+                            "checksums": {
+                                "SHA1": sha1_
+                            },
+                            "dependencyFile": ""
+                        }
 
-        # if not check_el_inlist(pkg_name) and pck != {}:
-        if pck != {}:
-            if pkg_name not in added_el:
-                added_el.append(f"{pkg_name}")  # we add element to list if was not added before
-                dep.append(add_child(pck))
-                logger.debug(f'[{fn()}] Dependency added: {pkg_id}, sha1: {sha1}')
+                    if pck:
+                        if pkg_name not in added_el:
+                            added_el.append(pkg_name)  # we add element to list if was not added before
+                            dep.append(add_child(pck))
+                            logger.debug(f'[{fn()}] Dependency added: {pkg_id}, sha1: {sha1}')
+                        break
+                    elif "NOASSERTION" not in pkg_name:
+                        logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else err_msg_}")
+            else:
+                if pkg_name not in added_el:
+                    added_el.append(pkg_name)  # we add element to list if was not added before
+                    pack_exe_list.append({pkg_name : pkg_ver})
+
+    for d in execute_pack_exe_list(pack_exe_list,[{c.libtype : c.ext} for c in SHA1CalcType]):
+        # Execute whole list of extensions
+        dep.append(add_child(d))
 
     logger.debug(f'[{fn()}] Constructing update request')
-    if args.scope_token == '' or args.scope_token is None:
+    if not args.scope_token:
         prj = [
             {
                 "coordinates": {
@@ -392,7 +478,7 @@ def create_body(args):
     return out
 
 
-def get_files_from_pck(pck, sbom_f):
+def get_files_from_pck(pck, sbom_f): # Keep for future. Extracting files from Package
     file_lst = []
     try:
         f = pck['hasFiles']
