@@ -224,8 +224,12 @@ def create_body(args):
                 lname = try_or_error(lambda: lib_["artifactId"], '')
                 break
         except Exception as err:
-            error_code = json.loads(err.message[err.message.index("Error:")+6:])["errorCode"]  # Getting result as string, need to parse it
-            error_msg = json.loads(err.message[err.message.index("Error:")+6:])["errorMessage"]
+            if 'has insufficient permissions' in str(err):  # Executes response from WS SDK
+                logger.debug(f'[{fn()}] {err}')
+                exit(-1)  # In this case don't need to continue execution
+            else:
+                error_code = try_or_error(lambda: json.loads(err.message[err.message.index("Error:")+6:])["errorCode"], 4000)  # Getting result as string, need to parse it. 4000 is Unexpected error
+                error_msg = try_or_error(lambda: json.loads(err.message[err.message.index("Error:")+6:])["errorMessage"], str(err.message))
         logger.debug(f'[{fn()}] Result: sha1={sha1}, lname={lname}, error_code={error_code}, error_msg={error_msg}')
         return sha1, lname, error_code, error_msg
 
@@ -254,7 +258,7 @@ def create_body(args):
         logger.error(f'[{fn()}] Unable to parse input file: {err}')
         exit(-1)
 
-    if PrjID == '' or PrjID is None:
+    if not PrjID:
         logger.error(f'[{fn()}] Scope must include either project name or project token')
         exit(-1)
 
@@ -263,7 +267,7 @@ def create_body(args):
         for rel_ in sbom["relationships"]:
             if rel_['relationshipType'] == "DEPENDS_ON":
                 relations.append({rel_['spdxElementId']: rel_['relatedSpdxElement']})
-    except AttributeError as err_a:
+    except Exception as err:
         logger.debug(f'[{fn()}] "relationships" block not found, skipping')
 
     pkgs = try_or_error(lambda: sbom["packages"], sbom)  # from JSON or from CSV
