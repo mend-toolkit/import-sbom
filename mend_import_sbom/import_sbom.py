@@ -224,12 +224,13 @@ def create_body(args):
                 lname = try_or_error(lambda: lib_["artifactId"], '')
                 break
         except Exception as err:
-            if 'has insufficient permissions' in str(err):  # Executes response from WS SDK
-                logger.debug(f'[{fn()}] {err}')
+            err_ = str(err)
+            if 'has insufficient permissions' in err_:  # Executes response from WS SDK
+                logger.debug(f'[{fn()}] {err_}')
                 exit(-1)  # In this case don't need to continue execution
             else:
-                error_code = try_or_error(lambda: json.loads(err.message[err.message.index("Error:")+6:])["errorCode"], 4000)  # Getting result as string, need to parse it. 4000 is Unexpected error
-                error_msg = try_or_error(lambda: json.loads(err.message[err.message.index("Error:")+6:])["errorMessage"], str(err.message))
+                error_code = try_or_error(lambda: json.loads(err_[err_.index("Error:")+6:])["errorCode"], 4000)  # Getting result as string, need to parse it. 4000 is Unexpected error
+                error_msg = try_or_error(lambda: json.loads(err_[err_.index("Error:") + 6:])["errorMessage"], err_)
         logger.debug(f'[{fn()}] Result: sha1={sha1}, lname={lname}, error_code={error_code}, error_msg={error_msg}')
         return sha1, lname, error_code, error_msg
 
