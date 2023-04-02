@@ -329,24 +329,24 @@ def create_body(args):
 
             sha1_ = ""
             res_err_msg = ""
+            logger.info(f'[{fn()}] Mend library search: {pkg_id}')
             for l_type in lang_types:
                 for key, value in l_type.items():
                     if pkg_ver:
-                        logger.info(f'[{fn()}] Mend library search: {pkg_id}')
                         sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pkg_name, lib_ver=pkg_ver, lib_type=key)
                         res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
                     else:
                         sha1_ = ""
                         lname_ = ""
                         err_msg_ = ""
-                if sha1_ != "":
+                if sha1_:
                     pck = {
                         "artifactId": f"{lname_}",
                         "version": pkg_ver,
                         "sha1": sha1_,
                         "systemPath": "",
                         "optional": False,
-                        "filename": f"{lname_}-{pkg_ver}.{value}",
+                        "filename": f"{lname_}-{pkg_ver}.{value}" if pkg_ver not in lname_ else lname_,
                         "checksums": {
                             "SHA1": sha1_
                         },
@@ -356,15 +356,20 @@ def create_body(args):
             if sha1_ == "" and pkg_name != "NOASSERTION":
                 logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else err_msg_}")
 
-        # if not check_el_inlist(pkg_name) and pck != {}:
-        if pck != {}:
-            if pkg_name not in added_el:
+        if pck and pkg_name not in added_el:
                 added_el.append(f"{pkg_name}")  # we add element to list if was not added before
                 dep.append(add_child(pck))
                 logger.debug(f'[{fn()}] Dependency added: {pkg_id}, sha1: {sha1}')
 
     logger.debug(f'[{fn()}] Constructing update request')
-    if args.scope_token == '' or args.scope_token is None:
+    if args.scope_token:
+        prj = [
+            {
+                "projectToken": f"{args.scope_token}",
+                "dependencies": dep
+            }
+        ]
+    else:
         prj = [
             {
                 "coordinates": {
@@ -373,15 +378,8 @@ def create_body(args):
                 "dependencies": dep
             }
         ]
-    else:
-        prj = [
-            {
-                "projectToken": f"{args.scope_token}",
-                "dependencies": dep
-            }
-        ]
 
-    out = {
+    return {
         "updateType": f"{args.update_type}",
         "type": "UPDATE",
         "agent": "fs-agent",
@@ -394,7 +392,6 @@ def create_body(args):
         "timeStamp": ts,
         "projects": prj
     }
-    return out
 
 
 def get_files_from_pck(pck, sbom_f):
