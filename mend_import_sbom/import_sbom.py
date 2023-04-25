@@ -12,7 +12,7 @@ import hashlib
 from ws_sdk import web, WS
 
 from mend_import_sbom._version import __version__, __tool_name__, __description__
-from mend_import_sbom.import_const import SHA1CalcType, aliases, varenvs
+from mend_import_sbom.import_const import SHA1CalcType, aliases, varenvs, Templates
 
 logger = logging.getLogger(__tool_name__)
 logger.setLevel(logging.DEBUG)
@@ -79,6 +79,8 @@ def parse_args():
                         default=varenvs.get_env("wsurl"), required=not varenvs.get_env("wsurl"))
     parser.add_argument('--offline', help="Create update request file without uploading", dest='offline',
                         default=os.environ.get("WS_OFFLINE", 'false'))
+    parser.add_argument('--multilang', help="Search library in all possible programming languages", dest='multilang',
+                        default=os.environ.get("WS_MULTILANG", 'true'))
     arguments = parser.parse_args()
 
     return arguments
@@ -174,7 +176,7 @@ def csv_to_json(csv_file):
 
 
 def create_body(args):
-    def create_add_sha1(langtype=""):  # maybe we will need to calculate additional sha1 later
+    def create_add_sha1(langtype : str, lib_name : str, lib_ver : str):  # maybe we will need to calculate additional sha1 later
         logger.debug(f'[{fn()}] langtype={langtype}')
         pkg_str = ""
         try:
@@ -182,20 +184,11 @@ def create_body(args):
                 if ext_ref['referenceCategory'] == "PACKAGE_MANAGER":
                     pkgname = re.search(r"pkg:(.*?)/", ext_ref['referenceLocator'], flags=re.DOTALL).group(1).strip()
                     lang_type = SHA1CalcType.get_package_type(f_t=pkgname)
-                    if lang_type.lower_case == "y":
-                        pkg_str = f"{package['name'].lower()}_{package['versionInfo'].lower()}_{lang_type.language}"
-                    else:
-                        pkg_str = f"{package['name']}_{package['versionInfo']}_{lang_type.language}"
+                    pkg_str = f"{lib_name.lower()}_{lib_ver.lower()}_{lang_type.language}" if lang_type.lower_case == "y" else f"{lib_name}_{lib_ver}_{lang_type.language} "
                     break
-        except Exception as err:
-            if langtype == "":
-                return ""
-            else:
-                if SHA1CalcType.get_package_data(lng=langtype) == "y":
-                    pkg_str = f"{package['name'].lower()}_{package['versionInfo'].lower()}_{langtype}"
-                else:
-                    pkg_str = f"{package['name']}_{package['versionInfo']}_{langtype}"
-        return hashlib.sha1(pkg_str.encode("utf-8")).hexdigest()
+        except Exception:
+            pkg_str = f"{lib_name.lower()}_{lib_ver.lower()}_{langtype}" if SHA1CalcType.get_package_data(lng=langtype) == "y" else f"{lib_name}_{lib_ver}_{langtype}"
+        return hashlib.sha1(pkg_str.encode("utf-8")).hexdigest() if langtype else ""
 
     def get_pkg_parent(pkg_child: str):  # Will be needed for uploading source files
         logger.debug(f'[{fn()}] pkg_child={pkg_child}')
@@ -229,6 +222,26 @@ def create_body(args):
         logger.debug(f'[{fn()}] Result: sha1={sha1}, lname={lname}, error_code={error_code}, error_msg={error_msg}')
         return sha1, lname, error_code, error_msg
 
+    def get_template_data(creator : str, lib_name : str, lib_ver : str):
+        lname_ = ""
+        lver_ = ""
+        ltype_ = ""
+        for tmpl_ in Templates:
+            if tmpl_.name in creator.lower():
+                lname_ = lib_name[lib_name.find(tmpl_.value[0])+1:]
+                ltype_ = lib_name[0:lib_name.find(tmpl_.value[0])]
+                for el_ver_ in tmpl_.value[1].split(","):
+                    lver_ = lver_.replace(el_ver_,"") if lver_ else lib_ver.replace(el_ver_,"")
+                break
+        return lname_.strip() if lname_ else lib_name, lver_.strip() if lver_ else lib_ver, ltype_
+
+    def get_lang_data(creator_):
+        for pkg_type_ in SHA1CalcType:
+            if pkg_type_.libtype in creator_.lower():
+                return pkg_type_
+        return None
+    #logger.info(f"SHA1: {create_add_sha1(langtype='JAVA',lib_name='antisamy',lib_ver='1.5.3')}")
+    #exit(-1)
     ts = round(datetime.datetime.now().timestamp())
     global relations
     global pkgs
@@ -237,6 +250,7 @@ def create_body(args):
     relations = []
     added_el = []
     dep = []
+    pkg_top = ""
     PrjID = args.ws_project if (not args.scope_token) else args.scope_token
     logger.debug(f'[{fn()}] ts={ts}, PrjID={PrjID}')
 
@@ -263,15 +277,21 @@ def create_body(args):
         for rel_ in sbom["relationships"]:
             if rel_['relationshipType'] == "DEPENDS_ON":
                 relations.append({rel_['spdxElementId']: rel_['relatedSpdxElement']})
-    except AttributeError as err_a:
+    except Exception as err_a:
         logger.debug(f'[{fn()}] "relationships" block not found, skipping')
 
     pkgs = try_or_error(lambda: sbom["packages"], sbom)  # from JSON or from CSV
     logger.debug(f'[{fn()}] Adding dependencies')
+    creator = ""
+    for create_ in try_or_error(lambda: sbom["creationInfo"]["creators"], []):
+        if "Tool:" in create_:
+            creator = create_
     for package in pkgs:
+        pkg_type_ = get_lang_data(creator)  # Get info about possible package type from creator info
         sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}", '')
         pkg_name = try_or_error(lambda: package["packageFileName"], package["name"])
         pkg_ver = try_or_error(lambda: package['versionInfo'], '')
+        pkg_name, pkg_ver, pkg_type = get_template_data(creator=creator, lib_name=pkg_name,lib_ver=pkg_ver)  # If we know how made library name by creation tool
         pkg_id = f'{pkg_name}-{pkg_ver}' if pkg_ver else pkg_name
 
         if sha1:
@@ -301,52 +321,64 @@ def create_body(args):
                                             flags=re.DOTALL).group(1).strip()
                         pkg_data = SHA1CalcType.get_package_type(f_t=pkgname)
                         if pkg_data:
-                            lang_types.append({pkg_data.libtype: pkg_data.ext})
+                            lang_types.append((0,{pkg_data.libtype: pkg_data.ext}))
                             break
             except:
                 try:
                     if pkg_name != "NOASSERTION":
+                        if not pkg_type_ and pkg_type:  # If nothing from creator but got package type from library name
+                            pkg_type_ = try_or_error(lambda: SHA1CalcType.get_el_by_name(name=pkg_type), None)
                         ext_name = os.path.splitext(pkg_name)[1][1:]
                         if ext_name == "":  # type of extension was not provided. Taken all possible types
-                            for calctype_ in SHA1CalcType:
-                                lang_types.append({calctype_.libtype: calctype_.ext})
+                            if args.multilang.lower() == "true" or not pkg_type_:
+                                for calctype_ in SHA1CalcType:
+                                    lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,{calctype_.libtype: calctype_.ext}))
+                            else:
+                                lang_types.append((0 if pkg_type_.libtype == pkg_top else pkg_type_.order,
+                                           {pkg_type_.libtype: pkg_type_.ext}))
                         else:
                             type_lst = SHA1CalcType.get_package_type_list_by_ext(ext=ext_name)
                             if type_lst == []:
-                                for calctype_ in SHA1CalcType:  # Could not identify library extension
+                                if args.multilang.lower() == "true" or not pkg_type_:
+                                    for calctype_ in SHA1CalcType:  # Could not identify library extension
                                     # (could be part of the package name)
-                                    lang_types.append({calctype_.libtype: calctype_.ext})
+                                        lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,{calctype_.libtype: calctype_.ext}))
+                                else:
+                                    lang_types.append((0 if pkg_type_.libtype == pkg_top else pkg_type_.order,
+                                                       {pkg_type_.libtype: pkg_type_.ext}))
                             else:
                                 for type_lst_ in type_lst:
-                                    lang_types.append({type_lst_.libtype: type_lst_.ext})
+                                    lang_types.append((0,{type_lst_.libtype: type_lst_.ext}))
                 except:
                     pass
 
             sha1_ = ""
             res_err_msg = ""
+            logger.info(f'[{fn()}] Mend library search: {pkg_id}')
+            lang_types.sort(key= lambda m: m[0])
             for l_type in lang_types:
-                for key, value in l_type.items():
+                for key, value in l_type[1].items():
                     if pkg_ver:
-                        logger.info(f'[{fn()}] Mend library search: {pkg_id}')
                         sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pkg_name, lib_ver=pkg_ver, lib_type=key)
                         res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
                     else:
                         sha1_ = ""
                         lname_ = ""
                         err_msg_ = ""
-                if sha1_ != "":
+                if sha1_:
                     pck = {
                         "artifactId": f"{lname_}",
                         "version": pkg_ver,
                         "sha1": sha1_,
                         "systemPath": "",
                         "optional": False,
-                        "filename": f"{lname_}-{pkg_ver}.{value}",
+                        "filename": f"{lname_}-{pkg_ver}.{value}" if pkg_ver not in lname_ else lname_,
                         "checksums": {
                             "SHA1": sha1_
                         },
                         "dependencyFile": ""
                     }
+                    pkg_top = key
                     break
             if sha1_ == "" and pkg_name != "NOASSERTION":
                 logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else err_msg_}")

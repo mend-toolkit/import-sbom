@@ -75,6 +75,7 @@ import_sbom --input $SBOM_FILE_PATH --scope "ProductName//ProjectName"
 | **&#x2011;&#x2011;updateType** | `WS_UPDATETYPE` | `string` |    No    | APPEND or OVERRIDE results when importing into an existing project (default: `OVERRIDE`) |
 | **&#x2011;&#x2011;dir**        |                 | `string` |    No    | Output directory for the `update-request.txt` file** in Offline mode (default: `$PWD`)   |
 | **&#x2011;&#x2011;offline**    | `WS_OFFLINE`    |  `bool`  |    No    | Create offline update request file without uploading to Mend (default: `false`)          |
+| **&#x2011;&#x2011;multilang**  | `WS_MULTILANG`  |  `bool`  |   No**   | In case no SHA1 searching library by All known package types (default: `true`)           |
 
 > \* `--scope` specifies the hierarchy (full or partial) for uploading the SBOM report using product and project identifiers.  
 > Both the product and project can be identified by either names (for creating a new one) or token (for updating an existing one).  
@@ -86,6 +87,7 @@ import_sbom --input $SBOM_FILE_PATH --scope "ProductName//ProjectName"
 >  
 > ** See more details about the [update-request.txt](https://docs.mend.io/bundle/wsk/page/does_mend_have_the_ability_to_scan_when_offline_and_then_upload_the_scan_results_when_online_.html) file and [Offline mode](https://docs.mend.io/csh?context=2524153159&topicname=unified_agent_-_advanced_topics.html#Scanning-in-Offline-Mode)  in Mend's documentation.  
 
+> \** If `--multilang` is False script will try to find relevant package name in the Creator field. If such a candidate is found just it will be used for searching libraries.   
 
 ## Importing SPDX SBOM (JSON)
 
