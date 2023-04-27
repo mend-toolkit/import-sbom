@@ -222,7 +222,7 @@ def create_body(args):
         logger.debug(f'[{fn()}] Result: sha1={sha1}, lname={lname}, error_code={error_code}, error_msg={error_msg}')
         return sha1, lname, error_code, error_msg
 
-    def get_template_data(creator : str, lib_name : str, lib_ver : str):
+    def update_template_data(creator : str, lib_name : str, lib_ver : str):
         lname_ = ""
         lver_ = ""
         ltype_ = ""
@@ -240,8 +240,6 @@ def create_body(args):
             if pkg_type_.libtype in creator_.lower():
                 return pkg_type_
         return None
-    #logger.info(f"SHA1: {create_add_sha1(langtype='JAVA',lib_name='antisamy',lib_ver='1.5.3')}")
-    #exit(-1)
     ts = round(datetime.datetime.now().timestamp())
     global relations
     global pkgs
@@ -277,7 +275,7 @@ def create_body(args):
         for rel_ in sbom["relationships"]:
             if rel_['relationshipType'] == "DEPENDS_ON":
                 relations.append({rel_['spdxElementId']: rel_['relatedSpdxElement']})
-    except Exception as err_a:
+    except Exception:
         logger.debug(f'[{fn()}] "relationships" block not found, skipping')
 
     pkgs = try_or_error(lambda: sbom["packages"], sbom)  # from JSON or from CSV
@@ -287,11 +285,11 @@ def create_body(args):
         if "Tool:" in create_:
             creator = create_
     for package in pkgs:
-        pkg_type_ = get_lang_data(creator)  # Get info about possible package type from creator info
+        pkg_type_creator = get_lang_data(creator)  # Get info about possible package type from creator info
         sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}", '')
         pkg_name = try_or_error(lambda: package["packageFileName"], package["name"])
         pkg_ver = try_or_error(lambda: package['versionInfo'], '')
-        pkg_name, pkg_ver, pkg_type = get_template_data(creator=creator, lib_name=pkg_name,lib_ver=pkg_ver)  # If we know how made library name by creation tool
+        pkg_name, pkg_ver, pkg_type = update_template_data(creator=creator, lib_name=pkg_name,lib_ver=pkg_ver)  # If we know how made library name by creation tool
         pkg_id = f'{pkg_name}-{pkg_ver}' if pkg_ver else pkg_name
 
         if sha1:
@@ -326,26 +324,26 @@ def create_body(args):
             except:
                 try:
                     if pkg_name != "NOASSERTION":
-                        if not pkg_type_ and pkg_type:  # If nothing from creator but got package type from library name
-                            pkg_type_ = try_or_error(lambda: SHA1CalcType.get_el_by_name(name=pkg_type), None)
+                        if not pkg_type_creator and pkg_type:  # If nothing from creator but got package type from library name
+                            pkg_type_creator = try_or_error(lambda: SHA1CalcType.get_el_by_name(name=pkg_type), None)
                         ext_name = os.path.splitext(pkg_name)[1][1:]
                         if ext_name == "":  # type of extension was not provided. Taken all possible types
-                            if args.multilang.lower() == "true" or not pkg_type_:
+                            if args.multilang.lower() == "true" or not pkg_type_creator:
                                 for calctype_ in SHA1CalcType:
                                     lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,{calctype_.libtype: calctype_.ext}))
                             else:
-                                lang_types.append((0 if pkg_type_.libtype == pkg_top else pkg_type_.order,
-                                           {pkg_type_.libtype: pkg_type_.ext}))
+                                lang_types.append((0 if pkg_type_creator.libtype == pkg_top else pkg_type_creator.order,
+                                           {pkg_type_creator.libtype: pkg_type_creator.ext}))
                         else:
                             type_lst = SHA1CalcType.get_package_type_list_by_ext(ext=ext_name)
                             if type_lst == []:
-                                if args.multilang.lower() == "true" or not pkg_type_:
+                                if args.multilang.lower() == "true" or not pkg_type_creator:
                                     for calctype_ in SHA1CalcType:  # Could not identify library extension
                                     # (could be part of the package name)
                                         lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,{calctype_.libtype: calctype_.ext}))
                                 else:
-                                    lang_types.append((0 if pkg_type_.libtype == pkg_top else pkg_type_.order,
-                                                       {pkg_type_.libtype: pkg_type_.ext}))
+                                    lang_types.append((0 if pkg_type_creator.libtype == pkg_top else pkg_type_creator.order,
+                                                       {pkg_type_creator.libtype: pkg_type_creator.ext}))
                             else:
                                 for type_lst_ in type_lst:
                                     lang_types.append((0,{type_lst_.libtype: type_lst_.ext}))
