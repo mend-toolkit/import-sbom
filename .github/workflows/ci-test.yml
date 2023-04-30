@@ -1,4 +1,4 @@
-name: CI-import-sbom
+name: CI-TEST-import-sbom
 on:
   workflow_dispatch:
   push:
