@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - '**'
+      - '!staging'
       - '!ws-iac-scan-results/**'
       - '!whitesource-remediate/master-all**'
       - '!whitesource/**'
