@@ -286,7 +286,8 @@ def create_body(args):
             creator = create_
     for package in pkgs:
         pkg_type_creator = get_lang_data(creator)  # Get info about possible package type from creator info
-        sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}", '')
+        algorithm = try_or_error(lambda: f"{package['checksums'][0]['algorithm']}", '')
+        sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}", '') if algorithm == "SHA1" or algorithm == "SHA-1" else ""
         pkg_name = try_or_error(lambda: package["packageFileName"], package["name"])
         pkg_ver = try_or_error(lambda: package['versionInfo'], '')
         pkg_name, pkg_ver, pkg_type = update_template_data(creator=creator, lib_name=pkg_name,lib_ver=pkg_ver)  # If we know how made library name by creation tool
@@ -409,8 +410,8 @@ def create_body(args):
     out = {
         "updateType": f"{args.update_type}",
         "type": "UPDATE",
-        "agent": "fs-agent",
-        "agentVersion": "",
+        "agent": f"{__tool_name__.replace('_', '-')}",
+        "agentVersion": f"{__version__}",
         "pluginVersion": "",
         "orgToken": f"{args.ws_token}",
         "userKey": f"{args.ws_user_key}",
@@ -476,7 +477,8 @@ def upload_to_mend(upload):
         else:
             logger.debug(f'[{fn()}] Uploading project:  {upload_projects[0]}')
 
-        payload = f"type=UPDATE&updateType={args.update_type}&agent=fs-agent&agentVersion=1.0&token={args.ws_token}&" \
+        # agent=fs-agent&agentVersion=1.0
+        payload = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
                   f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
         conn.request("POST", "/agent", payload, headers)
