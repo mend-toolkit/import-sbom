@@ -110,9 +110,10 @@ jobs:
       # Copy whl
       - name: Copy whl
         run: |
-          echo "WHL_NAME=${{ env.APP_DIR }}-${{ env.APP_VERSION }}-py3-none-any.whl" >> $GITHUB_ENV
+          whl_name="${{ env.APP_DIR }}-${{ env.APP_VERSION }}-py3-none-any.whl"
+          echo "WHL_NAME=$whl_name" >> $GITHUB_ENV
           mkdir dist/${{ env.PYTHON_VERSION }}
-          cp dist/${{ env.WHL_NAME }} dist/${{ env.PYTHON_VERSION }}/
+          cp dist/$whl_name dist/${{ env.PYTHON_VERSION }}/
 
       # Cache whl
       - name: Cache whl
