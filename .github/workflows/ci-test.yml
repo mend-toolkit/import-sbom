@@ -29,7 +29,7 @@ jobs:
         id: set_env_vars_build
         run: |
           echo "APP_DIR=${{ env.APP_NAME }}" >> $GITHUB_ENV
-          echo "APP_VERSION=0.0.0.ci0" >> $GITHUB_ENV
+          echo "APP_VERSION=1.1.1" >> $GITHUB_ENV
           echo "RELEASE=false" >> $GITHUB_ENV
           if [[ "$GITHUB_REF" == *"refs/tags/v"* || "$GITHUB_REF" == *"refs/tags/test-v"* ]]; then
             echo "APP_VERSION=$(echo ${{ github.ref }} | sed -r 's/^[\/a-zA-z-]+//')" >> $GITHUB_ENV
