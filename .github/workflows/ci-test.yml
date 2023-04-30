@@ -1,0 +1,299 @@
+name: CI-import-sbom
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+      - '!ws-iac-scan-results/**'
+      - '!whitesource-remediate/master-all**'
+      - '!whitesource/**'
+    tags:
+      - '*'
+  schedule:
+    - cron: '0 4 * * *'
+
+env:
+  APP_NAME: mend_import_sbom
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10' , '3.11']
+    
+    steps:
+      # Set Environment Variables
+      - name: Set Environment Variables
+        id: set_env_vars_build
+        run: |
+          echo "APP_DIR=${{ env.APP_NAME }}" >> $GITHUB_ENV
+          echo "APP_VERSION=0.0.0.ci0" >> $GITHUB_ENV
+          echo "RELEASE=false" >> $GITHUB_ENV
+          if [[ "$GITHUB_REF" == *"refs/tags/v"* || "$GITHUB_REF" == *"refs/tags/test-v"* ]]; then
+            echo "APP_VERSION=$(echo ${{ github.ref }} | sed -r 's/^[\/a-zA-z-]+//')" >> $GITHUB_ENV
+            if [[ $APP_VERSION != *@(a|b)* ]]; then
+              echo "RELEASE=true" >> $GITHUB_ENV
+            fi
+          fi
+
+          echo "GH_USER=${{ github.actor }}" >> $GITHUB_ENV
+          echo "COMMIT_ID=${{ github.sha }}" >> $GITHUB_ENV
+
+          echo "PYTHON_VERSION=${{ matrix.python-version }}" >> $GITHUB_ENV
+          if [[ ${{ strategy.job-index }} == 0 ]]; then
+            echo "MIN_PY_VER=${{ matrix.python-version }}" >> $GITHUB_ENV
+          fi
+
+          echo Get Repository Information
+          repoInfo=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}")
+          privateRepo=$(echo "$repoInfo" | jq -r '.private')
+          echo "PRIVATE_REPO=$privateRepo" >> $GITHUB_ENV
+      
+      # Get Source Branch
+      - uses: actions/checkout@v3
+      - name: Get Source Branch
+        id: get_source_branch
+        run: |
+          echo "SOURCE_BRANCH=$(git branch --contains ${{ env.COMMIT_ID }} | grep -E 'feature|staging' | sed 's/[ *]//g')" >> $GITHUB_ENV
+
+      # Set Package Version
+      - name: Set Package Version
+        run: |
+          sed -E -i  "s/^__version__ = \"[a-z0-9\.]+\"/__version__ = \"${{ env.APP_VERSION }}\"/g" ${{ env.APP_DIR }}/_version.py
+      
+      # Setup Python
+      - name: Setup Python ${{ matrix.python-version }}
+        id: setup_python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      # Install Dependencies
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 wheel -r requirements.txt
+
+      # Lint with flake8
+      - name: Lint with flake8
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --ignore=E501,F841
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      # Check Unit Test Files
+      - name: Check Unit Test Files
+        id: check_test_files
+        uses: andstor/file-existence-action@v2
+        with:
+          files: "*/tests/test_*.py"
+          
+      # Run Tests with pytest
+      - name: Run Tests with pytest
+        if: steps.check_test_files.outputs.files_exists == 'true'
+        run: |
+          pip install pytest
+          pytest
+
+      # Unit Tests
+      - name: Unit Tests
+        if: steps.check_test_files.outputs.files_exists == 'true'
+        run: python -m unittest
+
+      # Create whl Package
+      - name: Create whl Package
+        run: python setup.py bdist_wheel
+
+      # Copy whl
+      - name: Copy whl
+        run: |
+          echo "WHL_NAME=${{ env.APP_DIR }}-${{ env.APP_VERSION }}-py3-none-any.whl" >> $GITHUB_ENV
+          mkdir dist/${{ env.PYTHON_VERSION }}
+          cp dist/${{ env.WHL_NAME }} dist/${{ env.PYTHON_VERSION }}/
+
+      # Cache whl
+      - name: Cache whl
+        uses: actions/cache@v3
+        with:
+          path: dist/${{ env.PYTHON_VERSION }}/${{ env.WHL_NAME }}
+          key: ${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}
+
+      # Test Step
+      - name: Test Step - Build
+        id: test_step_build
+        run: |
+          echo "------------------------------------------"
+          echo "Source Branch:"
+          echo ${{ env.SOURCE_BRANCH }}
+          echo "------------------------------------------"
+          echo "App Version:"
+          cat ${{ env.APP_DIR }}/_version.py
+          echo "------------------------------------------"
+          echo "Test Files Exist:"
+          echo ${{ steps.check_test_files.outputs.files_exists }}
+          echo "------------------------------------------"
+          echo "WHL_NAME:"
+          echo "${{ env.WHL_NAME }}"
+          echo "------------------------------------------"
+          echo "File Tree:"
+          tree
+          echo "------------------------------------------"
+          echo "Cache Path:"
+          echo "dist/${{ env.PYTHON_VERSION }}/${{ env.WHL_NAME }}"
+          echo "------------------------------------------"
+          echo "Cache Key:"
+          echo "${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}"
+          echo "------------------------------------------"
+
+  publish-staging:
+    if: ${{ github.ref == 'refs/heads/staging' }}
+    needs: [build-and-test]
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Set Environment Variables
+      - name: Set Environment Variables
+        id: set_env_vars_staging
+        run: |
+          echo "PUB_WHL_DIR=dist/${{ env.MIN_PY_VER }}" >> $GITHUB_ENV
+        
+      # Restore whl
+      - name: Restore whl
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }}
+          key: ${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}
+        
+      # Configure AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      # Upload to S3 Bucket
+      - name: Upload to S3 Bucket
+        env:
+          AWS_BUCKET: mend-ps-staging
+        run: |
+          # TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
+          # aws s3 cp ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }} s3://${AWS_BUCKET}/${{ env.APP_DIR }}/"$TIMESTAMP"_${{ env.WHL_NAME }}
+          echo "S3_PUB_DIR=${{ env.APP_DIR }}/${{ env.APP_VERSION }}" >> $GITHUB_ENV
+          echo aws s3 cp ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }} s3://${AWS_BUCKET}/${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}
+          echo aws s3api put-object-tagging --bucket "$AWS_BUCKET" --key "${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ env.GH_USER }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ env.COMMIT_ID }}\"}]}"
+
+      # Test Step
+      - name: Test Step - Staging
+        id: test_step_staging
+        run: |
+          echo "------------------------------------------"
+          echo "Source Branch:"
+          echo ${{ env.SOURCE_BRANCH }}
+          echo "------------------------------------------"
+          echo "S3 Buplish Dir:"
+          echo ${{ env.S3_PUB_DIR }}
+          echo "------------------------------------------"
+          echo "WHL_NAME:"
+          echo "${{ env.WHL_NAME }}"
+          echo "------------------------------------------"
+          echo "Cache Restore Path:"
+          echo "${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }}"
+          echo "------------------------------------------"
+          echo "Cache Restore Key:"
+          echo "${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}"
+          echo "------------------------------------------"
+          echo "S3 Command - Copy:"
+          echo aws s3 cp ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }} s3://${AWS_BUCKET}/${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}
+          echo "------------------------------------------"
+          echo "S3 Command - Tagging:"
+          echo aws s3api put-object-tagging --bucket "$AWS_BUCKET" --key "${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ env.GH_USER }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ env.COMMIT_ID }}\"}]}"
+          echo "------------------------------------------"
+
+  publish-release:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs: [build-and-test]
+    runs-on: ubuntu-latest
+
+    steps:
+      # Set Environment Variables
+      - name: Set Environment Variables
+        id: set_env_vars_release
+        run: |
+          echo "PUB_WHL_DIR=dist/${{ env.MIN_PY_VER }}" >> $GITHUB_ENV
+      
+      # Restore whl
+      - name: Restore whl
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }}
+          key: ${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}
+
+      ## Publish to PyPI
+      # - name: Publish to PyPI
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     skip_existing: true
+      #     user: __token__
+      #     password: ${{ secrets.PYPI_API_TOKEN }}
+      #     packages_dir: ${{ env.PUB_WHL_DIR }}
+      
+      ## Create Release
+      # - uses: actions/checkout@v3
+      # - name: Create Release
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      #   uses: ncipollo/release-action@v1
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     allowUpdates: true
+      #     artifacts: ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }}
+      #     prerelease: ${{ env.RELEASE != 'true' }}
+      #     generateReleaseNotes: true
+      
+      ## Publish README to Mend.io Documentation
+      # - name: Publish Documentation
+      #   if: ${{ startsWith(github.ref, 'refs/tags/v') && env.PRIVATE_REPO == 'false' }}
+      #   uses: cupcakearmy/confluence-markdown-sync@v1
+      #   with:
+      #     from: README.md
+      #     to: 2225406280
+      #     cloud: whitesource
+      #     user: ${{ secrets.CONFLUENCE_USER }}
+      #     token: ${{ secrets.CONFLUENCE_TOKEN }}
+
+      # Test Step
+      - name: Test Step - Release
+        id: test_step_release
+        run: |
+          echo "------------------------------------------"
+          echo "Source Branch:"
+          echo ${{ env.SOURCE_BRANCH }}
+          echo "------------------------------------------"
+          echo "Min Python Version:"
+          echo ${{ env.MIN_PY_VER }}
+          echo "------------------------------------------"
+          echo "WHL_NAME:"
+          echo "${{ env.WHL_NAME }}"
+          echo "------------------------------------------"
+          echo "Cache Restore Path:"
+          echo "${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }}"
+          echo "------------------------------------------"
+          echo "Cache Restore Key:"
+          echo "${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}"
+          echo "------------------------------------------"
+          echo "Is a Release (GitHub ref starts with 'v'):"
+          echo "${{ startsWith(github.ref, 'refs/tags/v') }}"
+          echo "------------------------------------------"
+          echo "Is a Release/Pre-Release (env.RELEASE):"
+          echo "${{ env.RELEASE }}"
+          echo "------------------------------------------"
+          echo "Is Private Repo:"
+          echo "${{ env.PRIVATE_REPO }}"
+          echo "------------------------------------------"
+          echo "Should Publish Documentation:"
+          echo "${{ startsWith(github.ref, 'refs/tags/v') && env.PRIVATE_REPO == 'false' }}"
+          echo "------------------------------------------"
