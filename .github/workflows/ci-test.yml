@@ -25,6 +25,7 @@ jobs:
     
     steps:
       # Set Environment Variables
+      - uses: actions/checkout@v3
       - name: Set Environment Variables
         id: set_env_vars_build
         run: |
@@ -37,9 +38,9 @@ jobs:
               echo "RELEASE=true" >> $GITHUB_ENV
             fi
           fi
+          echo "WHL_NAME=${{ env.APP_NAME }}-${{ env.APP_VERSION }}-py3-none-any.whl" >> $GITHUB_ENV
 
-          echo "GH_USER=${{ github.actor }}" >> $GITHUB_ENV
-          echo "COMMIT_ID=${{ github.sha }}" >> $GITHUB_ENV
+          echo "SOURCE_BRANCH=$(git branch --contains ${{ github.sha }} | grep -E 'feature|staging' | sed 's/[ *]//g')" >> $GITHUB_ENV
 
           echo "PYTHON_VERSION=${{ matrix.python-version }}" >> $GITHUB_ENV
           if [[ ${{ strategy.job-index }} == 0 ]]; then
@@ -50,13 +51,18 @@ jobs:
           repoInfo=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}")
           privateRepo=$(echo "$repoInfo" | jq -r '.private')
           echo "PRIVATE_REPO=$privateRepo" >> $GITHUB_ENV
-      
-      # Get Source Branch
-      - uses: actions/checkout@v3
-      - name: Get Source Branch
-        id: get_source_branch
+
+      - name: Set Outputs
+        id: set_outputs
         run: |
-          echo "SOURCE_BRANCH=$(git branch --contains ${{ env.COMMIT_ID }} | grep -E 'feature|staging' | sed 's/[ *]//g')" >> $GITHUB_ENV
+          echo "APP_DIR=${{ env.APP_DIR }}" >> $GITHUB_OUTPUT
+          echo "APP_VERSION=${{ env.APP_VERSION }}" >> $GITHUB_OUTPUT
+          echo "RELEASE=${{ env.RELEASE }}" >> $GITHUB_OUTPUT
+          echo "SOURCE_BRANCH=${{ env.SOURCE_BRANCH }}" >> $GITHUB_OUTPUT
+          echo "PYTHON_VERSION=${{ env.PYTHON_VERSION }}" >> $GITHUB_OUTPUT
+          echo "MIN_PY_VER=${{ env.MIN_PY_VER }}" >> $GITHUB_OUTPUT
+          echo "PRIVATE_REPO=${{ env.PRIVATE_REPO }}" >> $GITHUB_OUTPUT
+          echo "WHL_NAME=${{ env.WHL_NAME }}" >> $GITHUB_OUTPUT
 
       # Set Package Version
       - name: Set Package Version
@@ -110,7 +116,7 @@ jobs:
       # Copy whl
       - name: Copy whl
         run: |
-          whl_name="${{ env.APP_DIR }}-${{ env.APP_VERSION }}-py3-none-any.whl"
+          whl_name="${{ env.APP_NAME }}-${{ env.APP_VERSION }}-py3-none-any.whl"
           echo "WHL_NAME=$whl_name" >> $GITHUB_ENV
           mkdir dist/${{ env.PYTHON_VERSION }}
           cp dist/$whl_name dist/${{ env.PYTHON_VERSION }}/
@@ -159,7 +165,15 @@ jobs:
       - name: Set Environment Variables
         id: set_env_vars_staging
         run: |
-          echo "PUB_WHL_DIR=dist/${{ env.MIN_PY_VER }}" >> $GITHUB_ENV
+          echo "APP_DIR=${{ needs.build-and-test.outputs.APP_DIR }}" >> $GITHUB_ENV
+          echo "APP_VERSION=${{ needs.build-and-test.outputs.APP_VERSION }}" >> $GITHUB_ENV
+          echo "RELEASE=${{ needs.build-and-test.outputs.RELEASE }}" >> $GITHUB_ENV
+          echo "SOURCE_BRANCH=${{ needs.build-and-test.outputs.SOURCE_BRANCH }}" >> $GITHUB_ENV
+          echo "PYTHON_VERSION=${{ needs.build-and-test.outputs.PYTHON_VERSION }}" >> $GITHUB_ENV
+          echo "MIN_PY_VER=${{ needs.build-and-test.outputs.MIN_PY_VER }}" >> $GITHUB_ENV
+          echo "PRIVATE_REPO=${{ needs.build-and-test.outputs.PRIVATE_REPO }}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ needs.build-and-test.outputs.WHL_NAME }}" >> $GITHUB_ENV
+          echo "PUB_WHL_DIR=dist/${{ needs.build-and-test.outputs.MIN_PY_VER }}" >> $GITHUB_ENV
         
       # Restore whl
       - name: Restore whl
@@ -185,7 +199,7 @@ jobs:
           # aws s3 cp ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }} s3://${AWS_BUCKET}/${{ env.APP_DIR }}/"$TIMESTAMP"_${{ env.WHL_NAME }}
           echo "S3_PUB_DIR=${{ env.APP_DIR }}/${{ env.APP_VERSION }}" >> $GITHUB_ENV
           echo aws s3 cp ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }} s3://${AWS_BUCKET}/${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}
-          echo aws s3api put-object-tagging --bucket "$AWS_BUCKET" --key "${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ env.GH_USER }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ env.COMMIT_ID }}\"}]}"
+          echo aws s3api put-object-tagging --bucket "$AWS_BUCKET" --key "${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
 
       # Test Step
       - name: Test Step - Staging
@@ -211,7 +225,7 @@ jobs:
           echo aws s3 cp ${{ env.PUB_WHL_DIR }}/${{ env.WHL_NAME }} s3://${AWS_BUCKET}/${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}
           echo "------------------------------------------"
           echo "S3 Command - Tagging:"
-          echo aws s3api put-object-tagging --bucket "$AWS_BUCKET" --key "${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ env.GH_USER }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ env.COMMIT_ID }}\"}]}"
+          echo aws s3api put-object-tagging --bucket "$AWS_BUCKET" --key "${{ env.S3_PUB_DIR }}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
           echo "------------------------------------------"
 
   publish-release:
@@ -224,7 +238,15 @@ jobs:
       - name: Set Environment Variables
         id: set_env_vars_release
         run: |
-          echo "PUB_WHL_DIR=dist/${{ env.MIN_PY_VER }}" >> $GITHUB_ENV
+          echo "APP_DIR=${{ needs.build-and-test.outputs.APP_DIR }}" >> $GITHUB_ENV
+          echo "APP_VERSION=${{ needs.build-and-test.outputs.APP_VERSION }}" >> $GITHUB_ENV
+          echo "RELEASE=${{ needs.build-and-test.outputs.RELEASE }}" >> $GITHUB_ENV
+          echo "SOURCE_BRANCH=${{ needs.build-and-test.outputs.SOURCE_BRANCH }}" >> $GITHUB_ENV
+          echo "PYTHON_VERSION=${{ needs.build-and-test.outputs.PYTHON_VERSION }}" >> $GITHUB_ENV
+          echo "MIN_PY_VER=${{ needs.build-and-test.outputs.MIN_PY_VER }}" >> $GITHUB_ENV
+          echo "PRIVATE_REPO=${{ needs.build-and-test.outputs.PRIVATE_REPO }}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ needs.build-and-test.outputs.WHL_NAME }}" >> $GITHUB_ENV
+          echo "PUB_WHL_DIR=dist/${{ needs.build-and-test.outputs.MIN_PY_VER }}" >> $GITHUB_ENV
       
       # Restore whl
       - name: Restore whl
