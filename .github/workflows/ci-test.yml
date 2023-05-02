@@ -24,7 +24,7 @@ jobs:
         python-version: ['3.9', '3.10' , '3.11']
     
     outputs:
-      APP_DIR: ${{ steps.set_env_vars_build.env.APP_DIR }}
+      APP_DIR: ${{ env.APP_NAME }}
       APP_VERSION: ${{ steps.set_env_vars_build.env.APP_VERSION }}
       RELEASE: ${{ steps.set_env_vars_build.env.RELEASE }}
       SOURCE_BRANCH: ${{ steps.set_env_vars_build.env.SOURCE_BRANCH }}
@@ -144,7 +144,7 @@ jobs:
           echo "${{ env.WHL_NAME }}"
           echo "------------------------------------------"
           echo "File Tree:"
-          tree
+          tree dist
           echo "------------------------------------------"
           echo "Cache Path:"
           echo "dist/${{ env.PYTHON_VERSION }}/${{ env.WHL_NAME }}"
