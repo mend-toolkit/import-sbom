@@ -79,8 +79,14 @@ def parse_args():
                         default=varenvs.get_env("wsurl"), required=not varenvs.get_env("wsurl"))
     parser.add_argument('--offline', help="Create update request file without uploading", dest='offline',
                         default=os.environ.get("WS_OFFLINE", 'false'))
-    parser.add_argument('--multilang', help="Search library in all possible programming languages", dest='multilang',
+    parser.add_argument('--multilang', help="Search library in all possible programming languages/packages", dest='multilang',
                         default=os.environ.get("WS_MULTILANG", 'true'))
+    parser.add_argument('--proxy', help="Proxy server URL", dest='proxy',
+                        default=os.environ.get("HTTP_PROXY", ''))
+    parser.add_argument('--proxyUsername', help="Proxy username", dest='proxyuser',
+                        default=os.environ.get("HTTP_PROXY_USERNAME", ''))
+    parser.add_argument('--proxyPassword', help="Proxy password", dest='proxypassword',
+                        default=os.environ.get("HTTP_PROXY_PASSWORD", ''))
     arguments = parser.parse_args()
 
     return arguments
@@ -464,11 +470,42 @@ def get_file_by_spdx(spdx, sbom_f):
     return file_data
 
 
+def analyze_proxy(proxy : str):
+    if proxy.startswith("https://"):
+        prefix = "https://"
+        proxy_ = proxy.replace("https://","")
+    elif proxy.startswith("http://"):
+        prefix = "http://"
+        proxy_ = proxy.replace("http://","")
+    else:
+        prefix = "https://"
+        proxy_ = proxy
+
+    proxy_url = proxy_.split(":")[0]
+    proxy_port = proxy_.split(":")[1]
+    #proxy_ = proxy if proxy.startswith("https://") or proxy.startswith("http://") else "https://"+proxy
+    if "@" not in proxy_url:
+        #user_ = proxy_[8 if "https://" in proxy_ else 7:proxy_.find("@")].split(":")[0]
+        #psw_ = proxy_[8 if "https://" in proxy_ else 7:proxy_.find("@")].split(":")[1]
+        user_psw = f"{args.proxyuser}:{args.proxypassword}@" if args.proxyuser and args.proxypassword else ""
+        proxy_url = user_psw+proxy_url
+    return prefix, proxy_url, proxy_port
+
+
 def upload_to_mend(upload):
     ts = round(datetime.datetime.now().timestamp())
     ret = None
     try:
-        conn = http.client.HTTPSConnection(f"{extract_url(args.ws_url)[8:]}")
+        if args.proxy:  # Proxy URL provided
+            prefix, proxy_url, proxy_port = analyze_proxy(args.proxy.strip())
+            if prefix == "https://":
+                conn = http.client.HTTPSConnection(host=proxy_url, port=proxy_port)
+            elif prefix == "http://":
+                conn = http.client.HTTPConnection(host=proxy_url, port=proxy_port)
+            #conn.set_tunnel(f"{extract_url(args.ws_url)[8:]}")
+            conn.set_tunnel(f"{args.ws_url}", port=443)
+        else:
+            conn = http.client.HTTPSConnection(f"{extract_url(args.ws_url)[8:]}")
         json_prj = json.dumps(upload['projects'])  # API understands just JSON Array type, not simple List
         upload_projects = [proj["coordinates"]["artifactId"] for proj in upload["projects"]]
         if len(upload_projects) > 1:
@@ -481,7 +518,7 @@ def upload_to_mend(upload):
         payload = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
                   f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        conn.request("POST", "/agent", payload, headers)
+        conn.request("POST", f"{args.ws_url}/agent", payload, headers)
         data = json.loads(conn.getresponse().read())
         data_json = json.loads(data["data"])
         data_json["product"] = upload.get("product")
