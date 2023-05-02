@@ -79,14 +79,8 @@ def parse_args():
                         default=varenvs.get_env("wsurl"), required=not varenvs.get_env("wsurl"))
     parser.add_argument('--offline', help="Create update request file without uploading", dest='offline',
                         default=os.environ.get("WS_OFFLINE", 'false'))
-    parser.add_argument('--multilang', help="Search library in all possible programming languages/packages", dest='multilang',
+    parser.add_argument('--multilang', help="Search library in all possible programming languages", dest='multilang',
                         default=os.environ.get("WS_MULTILANG", 'true'))
-    parser.add_argument('--proxy', help="Proxy server URL", dest='proxy',
-                        default=os.environ.get("HTTP_PROXY", ''))
-    parser.add_argument('--proxyUsername', help="Proxy username", dest='proxyuser',
-                        default=os.environ.get("HTTP_PROXY_USERNAME", ''))
-    parser.add_argument('--proxyPassword', help="Proxy password", dest='proxypassword',
-                        default=os.environ.get("HTTP_PROXY_PASSWORD", ''))
     arguments = parser.parse_args()
 
     return arguments
@@ -298,6 +292,7 @@ def create_body(args):
         pkg_ver = try_or_error(lambda: package['versionInfo'], '')
         pkg_name, pkg_ver, pkg_type = update_template_data(creator=creator, lib_name=pkg_name,lib_ver=pkg_ver)  # If we know how made library name by creation tool
         pkg_id = f'{pkg_name}-{pkg_ver}' if pkg_ver else pkg_name
+        download_loc = try_or_error(lambda: package["downloadLocation"], '')
 
         if sha1:
             pck = {
@@ -334,26 +329,21 @@ def create_body(args):
                         if not pkg_type_creator and pkg_type:  # If nothing from creator but got package type from library name
                             pkg_type_creator = try_or_error(lambda: SHA1CalcType.get_el_by_name(name=pkg_type), None)
                         ext_name = os.path.splitext(pkg_name)[1][1:]
-                        if ext_name == "":  # type of extension was not provided. Taken all possible types
+                        ext_name = ext_name if ext_name else os.path.splitext(download_loc)[1][1:]
+                        # Trying to get ext from download link if not found before
+                        type_lst = SHA1CalcType.get_package_type_list_by_ext(ext=ext_name) if ext_name else None
+                        if type_lst:
+                            for type_lst_ in type_lst:
+                                lang_types.append((0, {type_lst_.libtype: type_lst_.ext}))
+                        else:
                             if args.multilang.lower() == "true" or not pkg_type_creator:
-                                for calctype_ in SHA1CalcType:
-                                    lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,{calctype_.libtype: calctype_.ext}))
+                                for calctype_ in SHA1CalcType:  # Could not identify library extension
+                                    # (could be part of the package name)
+                                    lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,
+                                                       {calctype_.libtype: calctype_.ext}))
                             else:
                                 lang_types.append((0 if pkg_type_creator.libtype == pkg_top else pkg_type_creator.order,
-                                           {pkg_type_creator.libtype: pkg_type_creator.ext}))
-                        else:
-                            type_lst = SHA1CalcType.get_package_type_list_by_ext(ext=ext_name)
-                            if type_lst == []:
-                                if args.multilang.lower() == "true" or not pkg_type_creator:
-                                    for calctype_ in SHA1CalcType:  # Could not identify library extension
-                                    # (could be part of the package name)
-                                        lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,{calctype_.libtype: calctype_.ext}))
-                                else:
-                                    lang_types.append((0 if pkg_type_creator.libtype == pkg_top else pkg_type_creator.order,
-                                                       {pkg_type_creator.libtype: pkg_type_creator.ext}))
-                            else:
-                                for type_lst_ in type_lst:
-                                    lang_types.append((0,{type_lst_.libtype: type_lst_.ext}))
+                                                   {pkg_type_creator.libtype: pkg_type_creator.ext}))
                 except:
                     pass
 
@@ -470,42 +460,11 @@ def get_file_by_spdx(spdx, sbom_f):
     return file_data
 
 
-def analyze_proxy(proxy : str):
-    if proxy.startswith("https://"):
-        prefix = "https://"
-        proxy_ = proxy.replace("https://","")
-    elif proxy.startswith("http://"):
-        prefix = "http://"
-        proxy_ = proxy.replace("http://","")
-    else:
-        prefix = "https://"
-        proxy_ = proxy
-
-    proxy_url = proxy_.split(":")[0]
-    proxy_port = proxy_.split(":")[1]
-    #proxy_ = proxy if proxy.startswith("https://") or proxy.startswith("http://") else "https://"+proxy
-    if "@" not in proxy_url:
-        #user_ = proxy_[8 if "https://" in proxy_ else 7:proxy_.find("@")].split(":")[0]
-        #psw_ = proxy_[8 if "https://" in proxy_ else 7:proxy_.find("@")].split(":")[1]
-        user_psw = f"{args.proxyuser}:{args.proxypassword}@" if args.proxyuser and args.proxypassword else ""
-        proxy_url = user_psw+proxy_url
-    return prefix, proxy_url, proxy_port
-
-
 def upload_to_mend(upload):
     ts = round(datetime.datetime.now().timestamp())
     ret = None
     try:
-        if args.proxy:  # Proxy URL provided
-            prefix, proxy_url, proxy_port = analyze_proxy(args.proxy.strip())
-            if prefix == "https://":
-                conn = http.client.HTTPSConnection(host=proxy_url, port=proxy_port)
-            elif prefix == "http://":
-                conn = http.client.HTTPConnection(host=proxy_url, port=proxy_port)
-            #conn.set_tunnel(f"{extract_url(args.ws_url)[8:]}")
-            conn.set_tunnel(f"{args.ws_url}", port=443)
-        else:
-            conn = http.client.HTTPSConnection(f"{extract_url(args.ws_url)[8:]}")
+        conn = http.client.HTTPSConnection(f"{extract_url(args.ws_url)[8:]}")
         json_prj = json.dumps(upload['projects'])  # API understands just JSON Array type, not simple List
         upload_projects = [proj["coordinates"]["artifactId"] for proj in upload["projects"]]
         if len(upload_projects) > 1:
@@ -518,7 +477,7 @@ def upload_to_mend(upload):
         payload = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
                   f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        conn.request("POST", f"{args.ws_url}/agent", payload, headers)
+        conn.request("POST", "/agent", payload, headers)
         data = json.loads(conn.getresponse().read())
         data_json = json.loads(data["data"])
         data_json["product"] = upload.get("product")
