@@ -292,6 +292,7 @@ def create_body(args):
         pkg_ver = try_or_error(lambda: package['versionInfo'], '')
         pkg_name, pkg_ver, pkg_type = update_template_data(creator=creator, lib_name=pkg_name,lib_ver=pkg_ver)  # If we know how made library name by creation tool
         pkg_id = f'{pkg_name}-{pkg_ver}' if pkg_ver else pkg_name
+        download_loc = try_or_error(lambda: package["downloadLocation"], '')
 
         if sha1:
             pck = {
@@ -328,26 +329,21 @@ def create_body(args):
                         if not pkg_type_creator and pkg_type:  # If nothing from creator but got package type from library name
                             pkg_type_creator = try_or_error(lambda: SHA1CalcType.get_el_by_name(name=pkg_type), None)
                         ext_name = os.path.splitext(pkg_name)[1][1:]
-                        if ext_name == "":  # type of extension was not provided. Taken all possible types
+                        ext_name = ext_name if ext_name else os.path.splitext(download_loc)[1][1:]
+                        # Trying to get ext from download link if not found before
+                        type_lst = SHA1CalcType.get_package_type_list_by_ext(ext=ext_name) if ext_name else None
+                        if type_lst:
+                            for type_lst_ in type_lst:
+                                lang_types.append((0, {type_lst_.libtype: type_lst_.ext}))
+                        else:
                             if args.multilang.lower() == "true" or not pkg_type_creator:
-                                for calctype_ in SHA1CalcType:
-                                    lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,{calctype_.libtype: calctype_.ext}))
+                                for calctype_ in SHA1CalcType:  # Could not identify library extension
+                                    # (could be part of the package name)
+                                    lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,
+                                                       {calctype_.libtype: calctype_.ext}))
                             else:
                                 lang_types.append((0 if pkg_type_creator.libtype == pkg_top else pkg_type_creator.order,
-                                           {pkg_type_creator.libtype: pkg_type_creator.ext}))
-                        else:
-                            type_lst = SHA1CalcType.get_package_type_list_by_ext(ext=ext_name)
-                            if type_lst == []:
-                                if args.multilang.lower() == "true" or not pkg_type_creator:
-                                    for calctype_ in SHA1CalcType:  # Could not identify library extension
-                                    # (could be part of the package name)
-                                        lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,{calctype_.libtype: calctype_.ext}))
-                                else:
-                                    lang_types.append((0 if pkg_type_creator.libtype == pkg_top else pkg_type_creator.order,
-                                                       {pkg_type_creator.libtype: pkg_type_creator.ext}))
-                            else:
-                                for type_lst_ in type_lst:
-                                    lang_types.append((0,{type_lst_.libtype: type_lst_.ext}))
+                                                   {pkg_type_creator.libtype: pkg_type_creator.ext}))
                 except:
                     pass
 
