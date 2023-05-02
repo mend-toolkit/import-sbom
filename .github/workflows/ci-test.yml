@@ -23,6 +23,16 @@ jobs:
       matrix:
         python-version: ['3.9', '3.10' , '3.11']
     
+    outputs:
+      APP_DIR: ${{ steps.set_env_vars_build.env.APP_DIR }}
+      APP_VERSION: ${{ steps.set_env_vars_build.env.APP_VERSION }}
+      RELEASE: ${{ steps.set_env_vars_build.env.RELEASE }}
+      SOURCE_BRANCH: ${{ steps.set_env_vars_build.env.SOURCE_BRANCH }}
+      PYTHON_VERSION: ${{ steps.set_env_vars_build.env.PYTHON_VERSION }}
+      MIN_PY_VER: ${{ steps.set_env_vars_build.env.MIN_PY_VER }}
+      PRIVATE_REPO: ${{ steps.set_env_vars_build.env.PRIVATE_REPO }}
+      WHL_NAME: ${{ steps.set_env_vars_build.env.WHL_NAME }}
+    
     steps:
       # Set Environment Variables
       - uses: actions/checkout@v3
@@ -51,18 +61,6 @@ jobs:
           repoInfo=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}")
           privateRepo=$(echo "$repoInfo" | jq -r '.private')
           echo "PRIVATE_REPO=$privateRepo" >> $GITHUB_ENV
-
-      - name: Set Outputs
-        id: set_outputs
-        run: |
-          echo "APP_DIR=${{ env.APP_DIR }}" >> $GITHUB_OUTPUT
-          echo "APP_VERSION=${{ env.APP_VERSION }}" >> $GITHUB_OUTPUT
-          echo "RELEASE=${{ env.RELEASE }}" >> $GITHUB_OUTPUT
-          echo "SOURCE_BRANCH=${{ env.SOURCE_BRANCH }}" >> $GITHUB_OUTPUT
-          echo "PYTHON_VERSION=${{ env.PYTHON_VERSION }}" >> $GITHUB_OUTPUT
-          echo "MIN_PY_VER=${{ env.MIN_PY_VER }}" >> $GITHUB_OUTPUT
-          echo "PRIVATE_REPO=${{ env.PRIVATE_REPO }}" >> $GITHUB_OUTPUT
-          echo "WHL_NAME=${{ env.WHL_NAME }}" >> $GITHUB_OUTPUT
 
       # Set Package Version
       - name: Set Package Version
