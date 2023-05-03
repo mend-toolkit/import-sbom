@@ -31,7 +31,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ['3.9', '3.10' , '3.11']
+        python-version: ['3.9', '3.10']
 
     steps:
       - name: Set Environment Variables
@@ -174,9 +174,17 @@ jobs:
         id: upload_s3_bucket
         run: |
           TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
-          echo aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" s3://${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}/${TIMESTAMP}/${{ env.WHL_NAME }}"
+          echo aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}/${TIMESTAMP}/${{ env.WHL_NAME }}"
           echo aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${{ env.APP_DIR }}/${TIMESTAMP}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
 
+      - name: Staging Version Upload Notification (TBD)
+        id: staging_upload_notification
+        run: |
+          echo "Package is ready for testing"
+          echo "  App Name: ${{ env.APP_NAME }}"
+          echo "  Version:  ${{ env.VERSION }}"
+          echo "  S3 URL:   TBD"
+      
       - name: Publish to PyPI (Test)
       #   if: startsWith(github.ref, 'refs/tags/v')
         run: |
