@@ -52,7 +52,7 @@ jobs:
               pkgRelease=true
             fi
           elif [[ "$GITHUB_REF" == *"/staging" ]]; then
-            pkgVersion="$(echo "$pkgVersion" | sed -r "s/ci0/$(date +"%Y%m%d-%H%M")/")"
+            pkgVersion="$(echo "$pkgVersion" | sed -r "s/ci0/$(date +"%Y%m%d%H%M")/")"
           fi
           
           echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
@@ -124,9 +124,7 @@ jobs:
 
       - name: Install ${{ env.PKG_NAME }}
         id: install_whl
-        env:
-          WHL_NAME: ${{ env.WHL_NAME }}
-        run: pip install "dist/${WHL_NAME}"
+        run: pip install "dist/${{ env.WHL_NAME }}"
 
       - name: Copy wheel
         id: copy_whl
