@@ -96,7 +96,7 @@ jobs:
         id: install_dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 wheel pytest s3pypi -r requirements.txt
+          pip install flake8 wheel pytest -r requirements.txt
       
       - name: Lint with flake8
         id: lint_with_flake8
@@ -178,6 +178,7 @@ jobs:
       - name: Upload to S3 Bucket
         id: upload_s3_bucket
         run: |
+          pip install -U s3pypi
           TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
           # S3_APP_DIR="${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}"
           # echo aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}"
