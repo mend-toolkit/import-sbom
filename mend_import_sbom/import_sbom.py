@@ -6,9 +6,10 @@ import json
 import logging
 import os
 import sys
-import http.client
 import re
 import hashlib
+import requests
+
 from ws_sdk import web, WS
 
 from mend_import_sbom._version import __version__, __tool_name__, __description__
@@ -81,6 +82,12 @@ def parse_args():
                         default=os.environ.get("WS_OFFLINE", 'false'))
     parser.add_argument('--multilang', help="Search library in all possible programming languages", dest='multilang',
                         default=os.environ.get("WS_MULTILANG", 'true'))
+    parser.add_argument('--proxy', help="Proxy URL", dest='proxy',
+                        default=os.environ.get("HTTP_PROXY", ''))
+    parser.add_argument('--proxyUsername', help="Proxy Username", dest='proxyuser',
+                        default=os.environ.get("HTTP_PROXY_USERNAME", ''))
+    parser.add_argument('--proxyPassword', help="Proxy Password", dest='proxypsw',
+                        default=os.environ.get("HTTP_PROXY_PASSWORD", 'true'))
     arguments = parser.parse_args()
 
     return arguments
@@ -378,7 +385,6 @@ def create_body(args):
             if sha1_ == "" and pkg_name != "NOASSERTION":
                 logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else err_msg_}")
 
-        # if not check_el_inlist(pkg_name) and pck != {}:
         if pck != {}:
             if pkg_name not in added_el:
                 added_el.append(f"{pkg_name}")  # we add element to list if was not added before
@@ -460,11 +466,17 @@ def get_file_by_spdx(spdx, sbom_f):
     return file_data
 
 
+def analyze_proxy(proxy : str):
+    proxy_ = proxy.replace("https://","").replace("http://","")
+    if "@" not in proxy_ and args.proxyuser and args.proxypsw:
+        proxy_ = f"{args.proxyuser}:{args.proxypsw}@"+proxy_
+    return proxy_
+
+
 def upload_to_mend(upload):
     ts = round(datetime.datetime.now().timestamp())
     ret = None
     try:
-        conn = http.client.HTTPSConnection(f"{extract_url(args.ws_url)[8:]}")
         json_prj = json.dumps(upload['projects'])  # API understands just JSON Array type, not simple List
         upload_projects = [proj["coordinates"]["artifactId"] for proj in upload["projects"]]
         if len(upload_projects) > 1:
@@ -473,12 +485,18 @@ def upload_to_mend(upload):
         else:
             logger.debug(f'[{fn()}] Uploading project:  {upload_projects[0]}')
 
-        # agent=fs-agent&agentVersion=1.0
         payload = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
                   f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        conn.request("POST", "/agent", payload, headers)
-        data = json.loads(conn.getresponse().read())
+        proxy = analyze_proxy(args.proxy) if args.proxy else ""
+        proxies = {"https": f"http://{proxy}", "http": f"http://{proxy}"} if proxy else {}
+        resp = requests.post(
+            url=f"{extract_url(args.ws_url)}/agent",
+            data=payload,
+            headers=headers,
+            proxies=proxies)
+
+        data = json.loads(resp.content)  # json.loads(conn.getresponse().read())
         data_json = json.loads(data["data"])
         data_json["product"] = upload.get("product")
         logger.debug(f'[{fn()}] Response:\n{json.dumps(data_json, indent=2)}')
@@ -486,7 +504,6 @@ def upload_to_mend(upload):
             ret = data_json
         else:
             logger.error(f"Mend update request failed: {data['message']} ({data['data']})")
-        conn.close()
     except Exception as err:
         logger.error(f"Upload failed: {err}")
     return ret
