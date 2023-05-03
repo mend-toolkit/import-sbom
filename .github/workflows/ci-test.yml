@@ -52,7 +52,7 @@ jobs:
               pkgRelease=true
             fi
           elif [[ "$GITHUB_REF" == *"/staging" ]]; then
-            pkgVersion="$(echo ${{ github.ref }} | sed -r "s/ci0/$(date +"%Y%m%d")/")"
+            pkgVersion="$(echo "$pkgVersion" | sed -r "s/ci0/$(date +"%Y%m%d")/")"
           fi
           
           echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
