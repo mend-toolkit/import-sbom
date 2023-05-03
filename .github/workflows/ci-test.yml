@@ -51,8 +51,6 @@ jobs:
             if [[ $pkgVersion != *@(a|b)* ]]; then
               pkgRelease=true
             fi
-          else
-            pkgVersion="$(echo ${{ github.ref }} | sed -r 's|.*\/||')"
           fi
           
           echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
@@ -62,8 +60,11 @@ jobs:
           echo "WHL_NAME=${{ env.APP_NAME }}-${pkgVersion}-py3-none-any.whl" >> $GITHUB_OUTPUT
 
           echo "========== GITHUB_ENV ==========="
+          echo "PYTHON_VERSION=${{ matrix.python-version }}" >> $GITHUB_ENV
           echo "VERSION=$pkgVersion" >> $GITHUB_ENV
           echo "APP_DIR=${{ env.APP_NAME }}" >> $GITHUB_ENV
+          echo "PKG_NAME=${{ env.APP_NAME }}-${pkgVersion}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ env.APP_NAME }}-${pkgVersion}-py3-none-any.whl" >> $GITHUB_ENV
       
       - uses: actions/checkout@v3
       - name: Get Source Branch
@@ -119,26 +120,24 @@ jobs:
         id: create_whl
         run: python setup.py bdist_wheel
 
-      - name: Install ${{ steps.set_env_vars.outputs.PKG_NAME }}
+      - name: Install ${{ env.PKG_NAME }}
         id: install_whl
         env:
-          WHL_NAME: ${{ steps.set_env_vars.outputs.WHL_NAME }}
+          WHL_NAME: ${{ env.WHL_NAME }}
         run: pip install "dist/${WHL_NAME}"
 
       - name: Copy wheel
         id: copy_whl
-        env:
-          PYTHON_VERSION: ${{ steps.set_env_vars.outputs.PYTHON_VERSION }}
         run: |
-          mkdir "dist/${PYTHON_VERSION}"
-          cp dist/${{ steps.set_env_vars.outputs.APP_DIR }}-${{ steps.set_env_vars.outputs.VERSION }}-py3-none-any.whl dist/${{ steps.set_env_vars.outputs.PYTHON_VERSION }}/
+          mkdir "dist/${{ env.PYTHON_VERSION }}"
+          cp "dist/${{ env.WHL_NAME }}" "dist/${{ env.PYTHON_VERSION }}/"
 
       - name: Cache wheel
         id: cache_whl
         uses: actions/cache@v3
         with:
-          path: dist/${{ steps.set_env_vars.outputs.PYTHON_VERSION }}/${{ steps.set_env_vars.outputs.APP_DIR }}-${{ steps.set_env_vars.outputs.VERSION }}-py3-none-any.whl
-          key: ${{ steps.set_env_vars.outputs.PYTHON_VERSION }}_${{ steps.set_env_vars.outputs.APP_DIR }}_${{ github.run_id }}
+          path: dist/${{ env.PYTHON_VERSION }}/${{ env.WHL_NAME }}
+          key: ${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}
 
   publish:
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/staging'}}
@@ -146,6 +145,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Get Environment Variables
+        id: get_env_vars
+        run: |
+          echo "MIN_PY_VER=${{ needs.build-and-test.outputs.min_py_ver }}" >> $GITHUB_ENV
+          echo "APP_DIR=${{ needs.build-and-test.outputs.app_dir }}" >> $GITHUB_ENV
+          echo "VERSION=${{ needs.build-and-test.outputs.version }}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ needs.build-and-test.outputs.whl_name }}" >> $GITHUB_ENV
+
+      - name: TEST ENV VARS
+        run: |
+          echo "Restore wheel path: dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}"
+          echo "APP_DIR: ${{ env.APP_DIR }}"
+        
       - name: Restore whl
         uses: actions/cache@v3
         with:
