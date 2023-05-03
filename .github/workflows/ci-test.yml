@@ -52,7 +52,7 @@ jobs:
               pkgRelease=true
             fi
           else
-            pkgVersion="$(echo ${{ github.ref }} | sed -r 's/.*\///'
+            pkgVersion="$(echo ${{ github.ref }} | sed -r 's/.*\///')"
           fi
           
           echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
