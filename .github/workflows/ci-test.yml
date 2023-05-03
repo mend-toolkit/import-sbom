@@ -96,7 +96,7 @@ jobs:
         id: install_dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 wheel -r requirements.txt
+          pip install flake8 wheel pytest s3pypi -r requirements.txt
       
       - name: Lint with flake8
         id: lint_with_flake8
@@ -115,9 +115,7 @@ jobs:
       - name: Run Tests with pytest
         id: tests_pytest
         if: steps.check_test_files.outputs.files_exists == 'true'
-        run: |
-          pip install pytest
-          pytest
+        run: pytest
 
       - name: Unittest
         id: test_unittest
@@ -190,8 +188,9 @@ jobs:
           # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${S3_WHL_PATH}"
           # aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "$S3_WHL_PATH" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
 
-          aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}/"
-          aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${{ env.APP_DIR }}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
+          # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}/"
+          s3pypi --bucket ${{ env.AWS_BUCKET }} dist/${{ env.MIN_PY_VER }}/*
+          aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${$(echo ${{ env.APP_DIR }})//_/-}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
           
       - name: Staging Version Upload Notification (TBD)
         id: staging_upload_notification
