@@ -191,7 +191,7 @@ jobs:
 
           # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}/"
           s3pypi --bucket ${{ env.AWS_BUCKET }} dist/${{ env.MIN_PY_VER }}/*
-          aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${$(echo ${{ env.APP_DIR }})//_/-}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
+          aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "$(echo ${{ env.APP_DIR }} | sed 's/_/-/g')/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
           
       - name: Staging Version Upload Notification (TBD)
         id: staging_upload_notification
