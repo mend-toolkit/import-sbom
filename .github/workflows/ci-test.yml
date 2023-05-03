@@ -52,7 +52,13 @@ jobs:
               pkgRelease=true
             fi
           elif [[ "$GITHUB_REF" == *"/staging" ]]; then
-            pkgVersion="$(date +"%Y%m%d").0.rc$(date +"%H%M")"
+            latestVer="$(git describe --tags $(git rev-list --tags --max-count=1) | sed -r 's/^[\/a-zA-z-]+//')"
+            if [[ $(echo "$latestVer" | cut -d. -f1,2) == $(date +"%y.%-m") ]] ; then
+              nextVersion="$(date +"%y.%-m").$(( $(echo "$latestVer" | sed 's/.*\.//') + 1 ))"
+            else
+              nextVersion="$(date +"%y.%-m.1")"
+            fi
+            pkgVersion="${nextVersion}.rc$(date +"%Y%m%d%H%M")"
           fi
           
           echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
