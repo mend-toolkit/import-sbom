@@ -25,6 +25,8 @@ jobs:
       version: ${{ steps.set_env_vars.outputs.VERSION }}
       release: ${{ steps.set_env_vars.outputs.RELEASE }}
       app_dir: ${{ steps.set_env_vars.outputs.APP_DIR }}
+      pkg_name: ${{ steps.set_env_vars.outputs.PKG_NAME }}
+      whl_name: ${{ steps.set_env_vars.outputs.WHL_NAME }}
       source_branch: ${{ steps.get_source_branch.outputs.SOURCE_BRANCH }}
 
     strategy:
@@ -35,19 +37,31 @@ jobs:
       - name: Set Environment Variables
         id: set_env_vars
         run: |
+          pkgVersion=0.0.0.ci0
+          pkgRelease=false
+
+          echo "========= GITHUB_OUTPUT ========="
           echo "PYTHON_VERSION=${{ matrix.python-version }}" >> $GITHUB_OUTPUT
           if [[ ${{ strategy.job-index }} == 0 ]]; then
             echo "MIN_PY_VER=${{ matrix.python-version }}" >> $GITHUB_OUTPUT
           fi
-          echo "VERSION=1.1.1.ci0" >> $GITHUB_OUTPUT
-          echo "RELEASE=false" >> $GITHUB_OUTPUT
-          echo "APP_DIR=${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
+
           if [[ "$GITHUB_REF" == *"refs/tags/v"* || "$GITHUB_REF" == *"refs/tags/test-v"* ]]; then
-            echo "VERSION=$(echo ${{ github.ref }} | sed -r 's/^[\/a-zA-z-]+//')" >> $GITHUB_OUTPUT
-            if [[ $VERSION != *@(a|b)* ]]; then
-              echo "RELEASE=true" >> $GITHUB_OUTPUT
+            pkgVersion="$(echo ${{ github.ref }} | sed -r 's/^[\/a-zA-z-]+//')"
+            if [[ $pkgVersion != *@(a|b)* ]]; then
+              pkgRelease=true
             fi
           fi
+          
+          echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
+          echo "RELEASE=$pkgRelease" >> $GITHUB_OUTPUT
+          echo "APP_DIR=${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
+          echo "PKG_NAME=${{ env.APP_NAME }}-${pkgVersion}" >> $GITHUB_OUTPUT
+          echo "WHL_NAME=${{ env.APP_NAME }}-${pkgVersion}-py3-none-any.whl" >> $GITHUB_OUTPUT
+
+          echo "========== GITHUB_ENV ==========="
+          echo "VERSION=$pkgVersion" >> $GITHUB_ENV
+          echo "APP_DIR=${{ env.APP_NAME }}" >> $GITHUB_ENV
       
       - uses: actions/checkout@v3
       - name: Get Source Branch
@@ -57,11 +71,8 @@ jobs:
       
       - name: Set Package Version
         id: set_package_version
-        env:
-          VERSION: ${{ steps.set_env_vars.outputs.VERSION }}
-          APP_DIR: ${{ steps.set_env_vars.outputs.APP_DIR }}
         run: |
-          sed -E -i  "s/^__version__ = \"[a-z0-9\.]+\"/__version__ = \"${VERSION}\"/g" "${APP_DIR}/_version.py"
+          sed -E -i  "s/^__version__ = \"[a-z0-9\.]+\"/__version__ = \"${{ env.VERSION }}\"/g" "${{ env.APP_DIR }}/_version.py"
       
       - name: Setup Python ${{ matrix.python-version }}
         id: setup_python
@@ -101,20 +112,25 @@ jobs:
         if: steps.check_test_files.outputs.files_exists == 'true'
         run: python -m unittest
 
-      - name: Create Wheel Package
+      - name: Create wheel Package
         id: create_whl
         run: python setup.py bdist_wheel
 
-      - name: Install Wheel Package
-        run: pip install dist/${{ steps.set_env_vars.outputs.APP_DIR }}-${{ steps.set_env_vars.outputs.VERSION }}-py3-none-any.whl
+      - name: Install ${{ steps.set_env_vars.outputs.PKG_NAME }}
+        id: install_whl
+        env:
+          WHL_NAME: ${{ steps.set_env_vars.outputs.WHL_NAME }}
+        run: pip install "dist/${WHL_NAME}"
 
-      - name: Copy whl
+      - name: Copy wheel
         id: copy_whl
+        env:
+          PYTHON_VERSION: ${{ steps.set_env_vars.outputs.PYTHON_VERSION }}
         run: |
-          mkdir dist/${{ steps.set_env_vars.outputs.PYTHON_VERSION }}
+          mkdir "dist/${PYTHON_VERSION}"
           cp dist/${{ steps.set_env_vars.outputs.APP_DIR }}-${{ steps.set_env_vars.outputs.VERSION }}-py3-none-any.whl dist/${{ steps.set_env_vars.outputs.PYTHON_VERSION }}/
 
-      - name: Cache whl
+      - name: Cache wheel
         id: cache_whl
         uses: actions/cache@v3
         with:
