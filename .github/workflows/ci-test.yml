@@ -58,7 +58,7 @@ jobs:
             else
               nextVersion="$(date +"%y.%-m.1")"
             fi
-            pkgVersion="${nextVersion}.rc$(date +"%Y%m%d%H%M")"
+            pkgVersion="${nextVersion}rc$(date +"%Y%m%d%H%M")"
           fi
           
           echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
