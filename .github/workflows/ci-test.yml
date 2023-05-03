@@ -51,6 +51,8 @@ jobs:
             if [[ $pkgVersion != *@(a|b)* ]]; then
               pkgRelease=true
             fi
+          else
+            echo "github.ref: ${{ github.ref }}"
           fi
           
           echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
@@ -73,6 +75,7 @@ jobs:
         id: set_package_version
         run: |
           sed -E -i  "s/^__version__ = \"[a-z0-9\.]+\"/__version__ = \"${{ env.VERSION }}\"/g" "${{ env.APP_DIR }}/_version.py"
+          cat "${{ env.APP_DIR }}/_version.py"
       
       - name: Setup Python ${{ matrix.python-version }}
         id: setup_python
