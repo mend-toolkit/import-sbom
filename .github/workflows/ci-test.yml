@@ -176,11 +176,14 @@ jobs:
         id: upload_s3_bucket
         run: |
           TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
-          S3_APP_DIR="${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}"
-
-          echo aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}"
-          echo aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${{ env.APP_DIR }}/${TIMESTAMP}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
-          echo aws s3 cp "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/latest/${{ env.WHL_NAME }}" --recursive --acl bucket-owner-full-control
+          # S3_APP_DIR="${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}"
+          # echo aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}"
+          # echo aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${{ env.APP_DIR }}/${TIMESTAMP}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
+          # echo aws s3 cp "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/latest/${{ env.WHL_NAME }}" --recursive --acl bucket-owner-full-control
+          
+          S3_APP_DIR="${{ env.AWS_BUCKET }}/packages/${{ env.APP_DIR }}"
+          aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/${{ env.VERSION }}/${{ env.WHL_NAME }}"
+          aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${{ env.APP_DIR }}/${{ env.VERSION }}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
 
       - name: Staging Version Upload Notification (TBD)
         id: staging_upload_notification
