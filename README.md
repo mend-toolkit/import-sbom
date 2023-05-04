@@ -1,19 +1,19 @@
-[![Logo](https://resources.mend.io/mend-sig/logo/mend-dark-logo-horizontal.png)](https://www.mend.io/)  
+[![Logo](https://resources.mend.io/mend-sig/logo/mend-dark-logo-horizontal.png)](https://www.mend.io/)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-yellowgreen.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/mend-toolkit/import-sbom/actions/workflows/ci.yml/badge.svg)](https://github.com/mend-toolkit/import-sbom/actions/workflows/ci.yml/badge.svg)
-[![GitHub release](https://img.shields.io/github/v/release/mend-toolkit/import-sbom)](https://github.com/mend-toolkit/import-sbom/releases/latest)  
+[![GitHub release](https://img.shields.io/github/v/release/mend-toolkit/import-sbom)](https://github.com/mend-toolkit/import-sbom/releases/latest)
 
 # Import SBOM
 
-A CLI tool that imports a project inventory into Mend from a SBOM report in the [SPDX](https://spdx.org) format or CSV format.  
+A CLI tool that imports a project inventory into Mend from a SBOM report in the [SPDX](https://spdx.org) format or CSV format.
 
 The tool can either upload data directly to Mend, or alternatively, create a Mend Offline Request file that can be uploaded separately using one of the following methods:
 - Using the Mend Unified Agent (see [Uploading an Offline Request File](https://docs.mend.io/bundle/unified_agent/page/scanning_with_the_unified_agent_in_offline_mode.html#Uploading-an-Offline-Request-File))
 - Via Mend's UI (**Admin** >> **Upload Update Request**)
 - Using Mend's API (see [Uploading Update Requests via the Mend API](https://docs.mend.io/bundle/wsk/page/uploading_update_requests_via_the_mend_api.html))
 
-The tool supports input files in either **JSON** or **CSV** formats.  
+The tool supports input files in either **JSON** or **CSV** formats.
 <hr>
 
 - [Import SBOM](#import-sbom)
@@ -57,12 +57,12 @@ export WS_WSS_URL=https://saas.mend.io
 
 import_sbom --input $SBOM_FILE_PATH --scope "ProductName//ProjectName"
 ```
-> **Note:** Either form is accepted. For the rest of the examples, the latter form would be used  
+> **Note:** Either form is accepted. For the rest of the examples, the latter form would be used
 
 ## Configuration Parameters
->**Note:** Parameters can be specified as either command-line arguments, environment variables, or a combination of both.  
-> 
-> Command-line arguments take precedence over environment variables.  
+>**Note:** Parameters can be specified as either command-line arguments, environment variables, or a combination of both.
+>
+> Command-line arguments take precedence over environment variables.
 
 | CLI argument                      | Env. Variable          |   Type   | Required | Description                                                                              |
 |:----------------------------------|:-----------------------|:--------:|:--------:|:-----------------------------------------------------------------------------------------|
@@ -81,17 +81,17 @@ import_sbom --input $SBOM_FILE_PATH --scope "ProductName//ProjectName"
 | **&#x2011;&#x2011;proxyPassword** | `HTTP_PROXY_PASSWORD`  | `string` |    No    | Proxy password, if needed and if not included in the proxy host.|
 
 
-> \* `--scope` specifies the hierarchy (full or partial) for uploading the SBOM report using product and project identifiers.  
-> Both the product and project can be identified by either names (for creating a new one) or token (for updating an existing one).  
->   
-> * `--scope "ProductName//ProjectName"` would specify both the product name and project name to create/update.  
-> * `--scope "ProjectName"` would specify only the project name, and the product name would default to `Mend-Imports`.  
-> * `--scope "ProjectToken"` would specify the token of an existing project, and the product name would default to that project's parent product. When specifying a project token, you cannot specify a product name/token.  
+> \* `--scope` specifies the hierarchy (full or partial) for uploading the SBOM report using product and project identifiers.
+> Both the product and project can be identified by either names (for creating a new one) or token (for updating an existing one).
+>
+> * `--scope "ProductName//ProjectName"` would specify both the product name and project name to create/update.
+> * `--scope "ProjectName"` would specify only the project name, and the product name would default to `Mend-Imports`.
+> * `--scope "ProjectToken"` would specify the token of an existing project, and the product name would default to that project's parent product. When specifying a project token, you cannot specify a product name/token.
 > * If `--scope` isn't specified, the project name will be taken from the SBOM's `name` property (for `*.json` SPDX) or its parent directory (for `*.csv`).
->  
-> ** See more details about the [update-request.txt](https://docs.mend.io/bundle/wsk/page/does_mend_have_the_ability_to_scan_when_offline_and_then_upload_the_scan_results_when_online_.html) file and [Offline mode](https://docs.mend.io/csh?context=2524153159&topicname=unified_agent_-_advanced_topics.html#Scanning-in-Offline-Mode)  in Mend's documentation.  
+>
+> ** See more details about the [update-request.txt](https://docs.mend.io/bundle/wsk/page/does_mend_have_the_ability_to_scan_when_offline_and_then_upload_the_scan_results_when_online_.html) file and [Offline mode](https://docs.mend.io/csh?context=2524153159&topicname=unified_agent_-_advanced_topics.html#Scanning-in-Offline-Mode)  in Mend's documentation.
 
-> \** If `--multilang` is False script will try to find relevant package name in the Creator field. If such a candidate is found just it will be used for searching libraries.   
+> \** If `--multilang` is False script will try to find relevant package name in the Creator field. If such a candidate is found just it will be used for searching libraries.
 
 ## Importing SPDX SBOM (JSON)
 
@@ -115,13 +115,13 @@ The following table describes the set of properties for each imported library:
 | **sha1**                 |   Yes*   | [SHA1](https://spdx.github.io/spdx-spec/v2.3/package-information/#710-package-checksum-field)                            |
 | **homepage**             |    No    | [Home Page](https://spdx.github.io/spdx-spec/v2.3/package-information/#711-package-home-page-field)                      |
 
-> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair.  
-> 
->    **Note:** If **sha1** isn't provided for a particular library, the tool will attempt to search that library by its name and version in Mend's index, which will result in longer execution times.  
+> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair.
+>
+>    **Note:** If **sha1** isn't provided for a particular library, the tool will attempt to search that library by its name and version in Mend's index, which will result in longer execution times.
 
 ### Execution Examples
 
-> **Note:** In the following examples, $WS_USERKEY, $WS_APIKEY and $WS_WSS_URL are assumed to have been exported as environment variables.  
+> **Note:** In the following examples, $WS_USERKEY, $WS_APIKEY and $WS_WSS_URL are assumed to have been exported as environment variables.
 
 Import SPDX SBOM into a new Mend project
 
@@ -172,9 +172,9 @@ import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/m
 | sha1                 | Yes*     | [SHA1](https://spdx.github.io/spdx-spec/v2.3/package-information/#710-package-checksum-field)                            |
 | homepage             | No       | [Home Page](https://spdx.github.io/spdx-spec/v2.3/package-information/#711-package-home-page-field)                      |
 
-> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair. Other fields can remain empty.  
-> 
->    **Note:** If **sha1** isn't provided for a particular library, the tool will attempt to search that library by its name and version in Mend's index, which will result in longer execution times.  
+> \* Each library requires either **sha1** or the **packageFileName** and **versionInfo** pair. Other fields can remain empty.
+>
+>    **Note:** If **sha1** isn't provided for a particular library, the tool will attempt to search that library by its name and version in Mend's index, which will result in longer execution times.
 
 ### Execution Examples
 
@@ -189,7 +189,7 @@ import_sbom --scope "$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/
 Import CSV SBOM, appending to an existing Mend project
 
 ```shell
-import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND 
+import_sbom --scope "$WS_PRODUCTNAME//$WS_PROJECTNAME" --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND
 
 import_sbom --scope $WS_PROJECTTOKEN --dir $HOME/reports --input $HOME/reports/$WS_PROJECTNAME.csv --updateType APPEND
 ```

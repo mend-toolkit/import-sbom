@@ -224,8 +224,13 @@ def create_body(args):
                 lname = try_or_error(lambda: lib_["artifactId"], '')
                 break
         except Exception as err:
-            error_code = json.loads(err.message[err.message.index("Error:")+6:])["errorCode"]  # Getting result as string, need to parse it
-            error_msg = json.loads(err.message[err.message.index("Error:")+6:])["errorMessage"]
+            err_ = str(err)
+            if 'has insufficient permissions' in err_:  # Executes response from WS SDK
+                logger.debug(f'[{fn()}] {err_}')
+                exit(-1)  # In this case don't need to continue execution
+            else:
+                error_code = try_or_error(lambda: json.loads(err_[err_.index("Error:")+6:])["errorCode"], 4000)  # Getting result as string, need to parse it. 4000 is Unexpected error
+                error_msg = try_or_error(lambda: json.loads(err_[err_.index("Error:") + 6:])["errorMessage"], err_)
         logger.debug(f'[{fn()}] Result: sha1={sha1}, lname={lname}, error_code={error_code}, error_msg={error_msg}')
         return sha1, lname, error_code, error_msg
 
@@ -273,7 +278,7 @@ def create_body(args):
         logger.error(f'[{fn()}] Unable to parse input file: {err}')
         exit(-1)
 
-    if PrjID == '' or PrjID is None:
+    if not PrjID:
         logger.error(f'[{fn()}] Scope must include either project name or project token')
         exit(-1)
 
@@ -392,7 +397,14 @@ def create_body(args):
                 logger.debug(f'[{fn()}] Dependency added: {pkg_id}, sha1: {sha1}')
 
     logger.debug(f'[{fn()}] Constructing update request')
-    if args.scope_token == '' or args.scope_token is None:
+    if args.scope_token:
+        prj = [
+            {
+                "projectToken": f"{args.scope_token}",
+                "dependencies": dep
+            }
+        ]
+    else:
         prj = [
             {
                 "coordinates": {
@@ -401,15 +413,8 @@ def create_body(args):
                 "dependencies": dep
             }
         ]
-    else:
-        prj = [
-            {
-                "projectToken": f"{args.scope_token}",
-                "dependencies": dep
-            }
-        ]
 
-    out = {
+    return {
         "updateType": f"{args.update_type}",
         "type": "UPDATE",
         "agent": f"{__tool_name__.replace('_', '-')}",
@@ -422,7 +427,6 @@ def create_body(args):
         "timeStamp": ts,
         "projects": prj
     }
-    return out
 
 
 def get_files_from_pck(pck, sbom_f):
