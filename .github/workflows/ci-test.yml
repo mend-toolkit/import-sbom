@@ -196,10 +196,8 @@ jobs:
       - name: Configure AWS CodeArtifact
         id: config_aws_codeartifact
         run: |
-          # twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --domain-owner $AWS_OWNER --query authorizationToken --output text)"
-          # twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --domain-owner $AWS_OWNER --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
-          twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --query authorizationToken --output text)"
-          twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
+          twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --query authorizationToken --output text)"
+          twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
 
           echo "TWINE_USERNAME=aws" >> $GITHUB_ENV
           echo "TWINE_PASSWORD=$twinePass" >> $GITHUB_ENV
