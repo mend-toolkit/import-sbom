@@ -201,18 +201,16 @@ jobs:
         run: |
           pip install twine
 
-          # twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --query authorizationToken --output text)"
-          # twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
-          # echo "TWINE_USERNAME=aws" >> $GITHUB_ENV
-          # echo "TWINE_PASSWORD=$twinePass" >> $GITHUB_ENV
-          # echo "TWINE_REPOSITORY_URL=$twineRepo" >> $GITHUB_ENV
-
-          aws codeartifact login --tool pip --repository ${{ env.AWS_REPO }} --domain ${{ env.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --region ${{ env.AWS_REGION }}
+          twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --query authorizationToken --output text)"
+          twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --repository ${{ env.AWS_REPO }} --format pypi --query repositoryEndpoint --output text)"
+          echo "TWINE_USERNAME=aws" >> $GITHUB_ENV
+          echo "TWINE_PASSWORD=$twinePass" >> $GITHUB_ENV
+          echo "TWINE_REPOSITORY_URL=$twineRepo" >> $GITHUB_ENV
 
       - name: Upload to AWS CodeArtifact
         id: upload_aws_codeartifact
         run: |
-          twine upload "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}"
+          twine upload --repository-url ${{ env.TWINE_REPOSITORY_URL }} "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}"
           
       - name: Staging Version Upload Notification (TBD)
         id: staging_upload_notification
