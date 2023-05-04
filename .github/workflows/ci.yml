@@ -1,10 +1,9 @@
-name: CI-import-sbom
+name: CI
 on:
   workflow_dispatch:
   push:
     branches:
       - '**'
-      - '!staging'
       - '!ws-iac-scan-results/**'
       - '!whitesource-remediate/master-all**'
       - '!whitesource/**'
@@ -14,9 +13,7 @@ on:
     - cron: '0 4 * * *'
 
 env:
-  TOOL_NAME: mend_import_sbom
-  GH_USER: ${{ github.actor }}
-  COMMIT_ID: ${{ github.sha }}
+  APP_NAME: mend_import_sbom
 
 jobs:
   build-and-test:
@@ -27,53 +24,82 @@ jobs:
       min_py_ver: ${{ steps.set_env_vars.outputs.MIN_PY_VER }}
       version: ${{ steps.set_env_vars.outputs.VERSION }}
       release: ${{ steps.set_env_vars.outputs.RELEASE }}
-      tool_dir: ${{ steps.set_env_vars.outputs.TOOL_DIR }}
+      app_dir: ${{ steps.set_env_vars.outputs.APP_DIR }}
+      pkg_name: ${{ steps.set_env_vars.outputs.PKG_NAME }}
+      whl_name: ${{ steps.set_env_vars.outputs.WHL_NAME }}
       source_branch: ${{ steps.get_source_branch.outputs.SOURCE_BRANCH }}
 
     strategy:
       matrix:
-        python-version: ['3.9', '3.10' , '3.11']
+        python-version: ['3.9', '3.10', '3.11']
 
     steps:
       - name: Set Environment Variables
         id: set_env_vars
         run: |
+          pkgVersion=0.0.0.ci0
+          pkgRelease=false
+
+          echo "========= GITHUB_OUTPUT ========="
           echo "PYTHON_VERSION=${{ matrix.python-version }}" >> $GITHUB_OUTPUT
           if [[ ${{ strategy.job-index }} == 0 ]]; then
             echo "MIN_PY_VER=${{ matrix.python-version }}" >> $GITHUB_OUTPUT
           fi
-          echo "VERSION=0.0.0.ci0" >> $GITHUB_OUTPUT
-          echo "RELEASE=false" >> $GITHUB_OUTPUT
-          echo "TOOL_DIR=${{env.TOOL_NAME}}" >> $GITHUB_OUTPUT
+
           if [[ "$GITHUB_REF" == *"refs/tags/v"* || "$GITHUB_REF" == *"refs/tags/test-v"* ]]; then
-            echo "VERSION=$(echo ${{github.ref}} | sed -r 's/^[\/a-zA-z-]+//')" >> $GITHUB_OUTPUT
-            if [[ $VERSION != *@(a|b)* ]]; then
-              echo "RELEASE=true" >> $GITHUB_OUTPUT
+            pkgVersion="$(echo ${{ github.ref }} | sed -r 's/^[\/a-zA-z-]+//')"
+            if [[ $pkgVersion != *@(a|b)* ]]; then
+              pkgRelease=true
             fi
+          elif [[ "$GITHUB_REF" == *"/staging" ]]; then
+            latestVer="$(git describe --tags $(git rev-list --tags --max-count=1) | sed -r 's/^[\/a-zA-z-]+//')"
+            if [[ $(echo "$latestVer" | cut -d. -f1,2) == $(date +"%y.%-m") ]] ; then
+              nextVersion="$(date +"%y.%-m").$(( $(echo "$latestVer" | sed 's/.*\.//') + 1 ))"
+            else
+              nextVersion="$(date +"%y.%-m.1")"
+            fi
+            pkgVersion="${nextVersion}rc$(date +"%Y%m%d%H%M")"
           fi
+          
+          echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
+          echo "RELEASE=$pkgRelease" >> $GITHUB_OUTPUT
+          echo "APP_DIR=${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
+          echo "PKG_NAME=${{ env.APP_NAME }}-${pkgVersion}" >> $GITHUB_OUTPUT
+          echo "WHL_NAME=${{ env.APP_NAME }}-${pkgVersion}-py3-none-any.whl" >> $GITHUB_OUTPUT
+
+          echo "========== GITHUB_ENV ==========="
+          echo "PYTHON_VERSION=${{ matrix.python-version }}" >> $GITHUB_ENV
+          echo "VERSION=$pkgVersion" >> $GITHUB_ENV
+          echo "APP_DIR=${{ env.APP_NAME }}" >> $GITHUB_ENV
+          echo "PKG_NAME=${{ env.APP_NAME }}-${pkgVersion}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ env.APP_NAME }}-${pkgVersion}-py3-none-any.whl" >> $GITHUB_ENV
       
       - uses: actions/checkout@v3
       - name: Get Source Branch
         id: get_source_branch
         run: |
-          echo "SOURCE_BRANCH=$(git branch --contains ${{env.COMMIT_ID}} | grep -E 'feature|staging' | sed 's/[ *]//g')" >> $GITHUB_OUTPUT
+          echo "SOURCE_BRANCH=$(git branch --contains ${{ github.sha }} | grep -E 'feature|staging' | sed 's/[ *]//g')" >> $GITHUB_OUTPUT
       
       - name: Set Package Version
+        id: set_package_version
         run: |
-          sed -E -i  "s/^__version__ = \"[a-z0-9\.]+\"/__version__ = \"${{steps.set_env_vars.outputs.VERSION}}\"/g"  ${{ steps.set_env_vars.outputs.TOOL_DIR }}/_version.py
+          sed -E -i  "s/^__version__ = \"[a-z0-9\.]+\"/__version__ = \"${{ env.VERSION }}\"/g" "${{ env.APP_DIR }}/_version.py"
+          cat "${{ env.APP_DIR }}/_version.py"
       
       - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        id: setup_python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
       
       - name: Install Dependencies
+        id: install_dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 wheel
-          pip install -r requirements.txt
+          pip install flake8 wheel pytest -r requirements.txt
       
       - name: Lint with flake8
+        id: lint_with_flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --ignore=E501,F841
@@ -87,77 +113,143 @@ jobs:
           files: "*/tests/test_*.py"
           
       - name: Run Tests with pytest
+        id: tests_pytest
         if: steps.check_test_files.outputs.files_exists == 'true'
-        run: |
-          pip install pytest
-          pytest
+        run: pytest
 
       - name: Unittest
+        id: test_unittest
         if: steps.check_test_files.outputs.files_exists == 'true'
         run: python -m unittest
 
-      - name: Create Wheel Package
+      - name: Create wheel Package
+        id: create_whl
         run: python setup.py bdist_wheel
 
-      - name: Install Wheel Package
-        run: pip install dist/${{ steps.set_env_vars.outputs.TOOL_DIR }}-${{ steps.set_env_vars.outputs.VERSION }}-py3-none-any.whl
+      - name: Install ${{ env.PKG_NAME }}
+        id: install_whl
+        run: pip install "dist/${{ env.WHL_NAME }}"
 
-      - name: Copy whl
+      - name: Copy wheel
+        id: copy_whl
         run: |
-          mkdir dist/${{ steps.set_env_vars.outputs.PYTHON_VERSION }}
-          cp dist/${{ steps.set_env_vars.outputs.TOOL_DIR }}-${{ steps.set_env_vars.outputs.VERSION }}-py3-none-any.whl dist/${{ steps.set_env_vars.outputs.PYTHON_VERSION }}/
+          mkdir "dist/${{ env.PYTHON_VERSION }}"
+          cp "dist/${{ env.WHL_NAME }}" "dist/${{ env.PYTHON_VERSION }}/"
 
-      - name: Cache whl
+      - name: Cache wheel
+        id: cache_whl
         uses: actions/cache@v3
         with:
-          path: dist/${{ steps.set_env_vars.outputs.PYTHON_VERSION }}/${{ steps.set_env_vars.outputs.TOOL_DIR }}-${{ steps.set_env_vars.outputs.VERSION }}-py3-none-any.whl
-          key: ${{ steps.set_env_vars.outputs.PYTHON_VERSION }}_${{ steps.set_env_vars.outputs.TOOL_DIR }}_${{ github.run_id }}
+          path: dist/${{ env.PYTHON_VERSION }}/${{ env.WHL_NAME }}
+          key: ${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}
 
-  publish:
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/staging'}}
+  publish-staging:
+    if: ${{ github.ref == 'refs/heads/staging'}}
     needs: [build-and-test]
     runs-on: ubuntu-latest
 
     steps:
+      - name: Get Environment Variables
+        id: get_env_vars
+        run: |
+          echo "MIN_PY_VER=${{ needs.build-and-test.outputs.min_py_ver }}" >> $GITHUB_ENV
+          echo "APP_DIR=${{ needs.build-and-test.outputs.app_dir }}" >> $GITHUB_ENV
+          echo "VERSION=${{ needs.build-and-test.outputs.version }}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ needs.build-and-test.outputs.whl_name }}" >> $GITHUB_ENV
+          echo "SOURCE_BRANCH=${{ needs.build-and-test.outputs.source_branch }}" >> $GITHUB_ENV
+          echo "AWS_REGION=eu-west-1" >> $GITHUB_ENV
+          echo "AWS_BUCKET=mend-ps-staging" >> $GITHUB_ENV
+          echo "AWS_DOMAIN=mend-ps" >> $GITHUB_ENV
+          echo "AWS_REPO=mend-ps-staging" >> $GITHUB_ENV
+          
       - name: Restore whl
+        id: restore_whl
         uses: actions/cache@v3
         with:
-          path: dist/${{needs.build-and-test.outputs.min_py_ver}}/${{needs.build-and-test.outputs.tool_dir}}-${{needs.build-and-test.outputs.version}}-py3-none-any.whl
-          key: ${{needs.build-and-test.outputs.min_py_ver}}_${{needs.build-and-test.outputs.tool_dir}}_${{ github.run_id }}
+          path: dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}
+          key: ${{ env.MIN_PY_VER }}_${{ env.APP_DIR }}_${{ github.run_id }}
 
       - name: Configure AWS Credentials
+        id: config_aws_creds
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload to S3 Bucket
-        env:
-          AWS_BUCKET: mend-ps-staging
+      - name: Configure AWS CodeArtifact
+        id: config_aws_codeartifact
         run: |
-          TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
-          aws s3 cp dist/${{needs.build-and-test.outputs.min_py_ver}}/${{needs.build-and-test.outputs.tool_dir}}-${{needs.build-and-test.outputs.version}}-py3-none-any.whl s3://${AWS_BUCKET}/${{needs.build-and-test.outputs.tool_dir}}/"$TIMESTAMP"_${{ env.TOOL_NAME }}.whl
-          aws s3api put-object-tagging --bucket "$AWS_BUCKET" --key ${{needs.build-and-test.outputs.tool_dir}}/"$TIMESTAMP"_${{ env.TOOL_NAME }}.whl --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ env.GH_USER}}\"},{\"Key\": \"Branch\", \"Value\": \"${{needs.build-and-test.outputs.source_branch}}\"},{\"Key\": \"CommitId\", \"Value\": \"${{env.COMMIT_ID}}\"}]}"
+          pip install twine
 
-      - name: Publish to PyPI
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: pypa/gh-action-pypi-publish@release/v1
+          twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --query authorizationToken --output text)"
+          twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --repository ${{ env.AWS_REPO }} --format pypi --query repositoryEndpoint --output text)"
+          echo "TWINE_USERNAME=aws" >> $GITHUB_ENV
+          echo "TWINE_PASSWORD=$twinePass" >> $GITHUB_ENV
+          echo "TWINE_REPOSITORY_URL=$twineRepo" >> $GITHUB_ENV
+
+      - name: Upload to AWS CodeArtifact
+        id: upload_aws_codeartifact
+        run: |
+          twine upload --repository-url ${{ env.TWINE_REPOSITORY_URL }} "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}"
+          
+      - name: Staging Version Upload Notification (TBD)
+        id: staging_upload_notification
+        run: |
+          echo "Package is ready for testing"
+          echo "  App Name: ${{ env.APP_NAME }}"
+          echo "  Version:  ${{ env.VERSION }}"
+          echo ""
+          echo "To install, use the commands:"
+          echo '  CODEARTIFACT_AUTH_TOKEN=`aws codeartifact get-authorization-token --domain ${{ env.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --region ${{ secrets.AWS_ACCOUNT_ID }} --query authorizationToken --output text`'
+          echo '  pip install --no-cache-dir --index-url=https://aws:$CODEARTIFACT_AUTH_TOKEN@${{ env.AWS_DOMAIN }}-${{ secrets.AWS_ACCOUNT_ID }}.d.codeartifact.${{ secrets.AWS_REGION }}.amazonaws.com/pypi/${{ secrets.AWS_REPO }}/simple/ ${{ env.APP_NAME }}'
+  
+  publish-release:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs: [build-and-test]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Environment Variables
+        id: get_env_vars
+        run: |
+          echo "MIN_PY_VER=${{ needs.build-and-test.outputs.min_py_ver }}" >> $GITHUB_ENV
+          echo "APP_DIR=${{ needs.build-and-test.outputs.app_dir }}" >> $GITHUB_ENV
+          echo "VERSION=${{ needs.build-and-test.outputs.version }}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ needs.build-and-test.outputs.whl_name }}" >> $GITHUB_ENV
+          echo "SOURCE_BRANCH=${{ needs.build-and-test.outputs.source_branch }}" >> $GITHUB_ENV
+          
+      - name: Restore whl
+        id: restore_whl
+        uses: actions/cache@v3
         with:
-          skip_existing: true
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          packages_dir: dist/${{needs.build-and-test.outputs.min_py_ver}}
-      - uses: actions/checkout@v3
-      - name: Create Release
+          path: dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}
+          key: ${{ env.MIN_PY_VER }}_${{ env.APP_DIR }}_${{ github.run_id }}
+
+      - name: Publish to PyPI (Test)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: ncipollo/release-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          allowUpdates: true
-          artifacts: dist/${{needs.build-and-test.outputs.min_py_ver}}/${{needs.build-and-test.outputs.tool_dir}}-${{needs.build-and-test.outputs.version}}-py3-none-any.whl
-          prerelease: ${{ needs.build-and-test.outputs.release != 'true' }}
-          generateReleaseNotes: true
+        run: |
+          echo "packages_dir: dist/${{ env.MIN_PY_VER }}"
+
+      # - name: Publish to PyPI
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     skip_existing: true
+      #     user: __token__
+      #     password: ${{ secrets.PYPI_API_TOKEN }}
+      #     packages_dir: dist/${{ needs.build-and-test.outputs.min_py_ver }}
+      
+      # - uses: actions/checkout@v3
+      # - name: Create Release
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      #   uses: ncipollo/release-action@v1
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     allowUpdates: true
+      #     artifacts: dist/${{needs.build-and-test.outputs.min_py_ver}}/${{needs.build-and-test.outputs.app_dir}}-${{needs.build-and-test.outputs.version}}-py3-none-any.whl
+      #     prerelease: ${{ needs.build-and-test.outputs.release != 'true' }}
+      #     generateReleaseNotes: true
       # - name: Publish to Confluence - Public
       #   if: startsWith(github.ref, 'refs/tags/v')
       #   uses: cupcakearmy/confluence-markdown-sync@v1
