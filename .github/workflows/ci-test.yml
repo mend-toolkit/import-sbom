@@ -175,23 +175,42 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload to S3 Bucket
-        id: upload_s3_bucket
-        run: |
-          pip install -U s3pypi
-          TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
-          # S3_APP_DIR="${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}"
-          # echo aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}"
-          # echo aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${{ env.APP_DIR }}/${TIMESTAMP}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
-          # echo aws s3 cp "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/latest/${{ env.WHL_NAME }}" --recursive --acl bucket-owner-full-control
+      # - name: Upload to S3 Bucket
+      #   id: upload_s3_bucket
+      #   run: |
+      #     pip install -U s3pypi
+      #     TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
+      #     # S3_APP_DIR="${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}"
+      #     # echo aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}"
+      #     # echo aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${{ env.APP_DIR }}/${TIMESTAMP}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
+      #     # echo aws s3 cp "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/latest/${{ env.WHL_NAME }}" --recursive --acl bucket-owner-full-control
           
-          # S3_WHL_PATH="packages/${{ env.APP_DIR }}/${{ env.VERSION }}/${{ env.WHL_NAME }}"
-          # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${S3_WHL_PATH}"
-          # aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "$S3_WHL_PATH" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
+      #     # S3_WHL_PATH="packages/${{ env.APP_DIR }}/${{ env.VERSION }}/${{ env.WHL_NAME }}"
+      #     # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${S3_WHL_PATH}"
+      #     # aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "$S3_WHL_PATH" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
 
-          # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}/"
-          s3pypi --bucket ${{ env.AWS_BUCKET }} dist/${{ env.MIN_PY_VER }}/*
-          aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "$(echo ${{ env.APP_DIR }} | sed 's/_/-/g')/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
+      #     # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}/"
+      #     s3pypi --bucket ${{ env.AWS_BUCKET }} dist/${{ env.MIN_PY_VER }}/*
+      #     aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "$(echo ${{ env.APP_DIR }} | sed 's/_/-/g')/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
+
+      - name: Configure AWS CodeArtifact
+        id: config_aws_codeartifact
+        run: |
+          # twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --domain-owner $AWS_OWNER --query authorizationToken --output text)"
+          # twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --domain-owner $AWS_OWNER --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
+          twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --query authorizationToken --output text)"
+          twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
+
+          echo "TWINE_USERNAME=aws" >> $GITHUB_ENV
+          echo "TWINE_PASSWORD=$twinePass" >> $GITHUB_ENV
+          echo "TWINE_REPOSITORY_URL=$twineRepo" >> $GITHUB_ENV
+
+          pip install twine
+
+      - name: Upload to AWS CodeArtifact
+        id: upload_aws_codeartifact
+        run: |
+          twine upload "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}"
           
       - name: Staging Version Upload Notification (TBD)
         id: staging_upload_notification
