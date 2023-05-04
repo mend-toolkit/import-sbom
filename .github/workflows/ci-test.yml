@@ -157,8 +157,11 @@ jobs:
           echo "VERSION=${{ needs.build-and-test.outputs.version }}" >> $GITHUB_ENV
           echo "WHL_NAME=${{ needs.build-and-test.outputs.whl_name }}" >> $GITHUB_ENV
           echo "SOURCE_BRANCH=${{ needs.build-and-test.outputs.source_branch }}" >> $GITHUB_ENV
-          echo "AWS_BUCKET=mend-ps-staging" >> $GITHUB_ENV
           echo "AWS_REGION=eu-west-1" >> $GITHUB_ENV
+          echo "AWS_BUCKET=mend-ps-staging" >> $GITHUB_ENV
+          echo "AWS_DOMAIN=mend-ps" >> $GITHUB_ENV
+          echo "AWS_REPO=mend-ps-staging" >> $GITHUB_ENV
+          
         
       - name: Restore whl
         id: restore_whl
@@ -196,12 +199,13 @@ jobs:
       - name: Configure AWS CodeArtifact
         id: config_aws_codeartifact
         run: |
-          twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --query authorizationToken --output text)"
-          twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
+          # twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --query authorizationToken --output text)"
+          # twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
+          # echo "TWINE_USERNAME=aws" >> $GITHUB_ENV
+          # echo "TWINE_PASSWORD=$twinePass" >> $GITHUB_ENV
+          # echo "TWINE_REPOSITORY_URL=$twineRepo" >> $GITHUB_ENV
 
-          echo "TWINE_USERNAME=aws" >> $GITHUB_ENV
-          echo "TWINE_PASSWORD=$twinePass" >> $GITHUB_ENV
-          echo "TWINE_REPOSITORY_URL=$twineRepo" >> $GITHUB_ENV
+          aws codeartifact login --tool pip --repository ${{ env.AWS_REPO }} --domain ${{ env.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --region ${{ env.AWS_REGION }}
 
           pip install twine
 
