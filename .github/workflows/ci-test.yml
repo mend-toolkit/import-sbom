@@ -143,8 +143,8 @@ jobs:
           path: dist/${{ env.PYTHON_VERSION }}/${{ env.WHL_NAME }}
           key: ${{ env.PYTHON_VERSION }}_${{ env.APP_DIR }}_${{ github.run_id }}
 
-  publish:
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/staging'}}
+  publish-staging:
+    if: ${{ github.ref == 'refs/heads/staging'}}
     needs: [build-and-test]
     runs-on: ubuntu-latest
 
@@ -199,6 +199,8 @@ jobs:
       - name: Configure AWS CodeArtifact
         id: config_aws_codeartifact
         run: |
+          pip install twine
+
           # twinePass="$(aws codeartifact get-authorization-token --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --query authorizationToken --output text)"
           # twineRepo="$(aws codeartifact get-repository-endpoint --domain ${{ env.AWS_BUCKET }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --repository ${{ env.AWS_BUCKET }} --format pypi --query repositoryEndpoint --output text)"
           # echo "TWINE_USERNAME=aws" >> $GITHUB_ENV
@@ -206,8 +208,6 @@ jobs:
           # echo "TWINE_REPOSITORY_URL=$twineRepo" >> $GITHUB_ENV
 
           aws codeartifact login --tool pip --repository ${{ env.AWS_REPO }} --domain ${{ env.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} --region ${{ env.AWS_REGION }}
-
-          pip install twine
 
       - name: Upload to AWS CodeArtifact
         id: upload_aws_codeartifact
@@ -224,9 +224,31 @@ jobs:
           echo ""
           echo "To install, use the command:"
           echo "  pip install --extra-index-url s3://${{ env.AWS_BUCKET }}/packages/ ${{ env.APP_NAME }}"
-      
+  
+  publish-release:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs: [build-and-test]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Environment Variables
+        id: get_env_vars
+        run: |
+          echo "MIN_PY_VER=${{ needs.build-and-test.outputs.min_py_ver }}" >> $GITHUB_ENV
+          echo "APP_DIR=${{ needs.build-and-test.outputs.app_dir }}" >> $GITHUB_ENV
+          echo "VERSION=${{ needs.build-and-test.outputs.version }}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ needs.build-and-test.outputs.whl_name }}" >> $GITHUB_ENV
+          echo "SOURCE_BRANCH=${{ needs.build-and-test.outputs.source_branch }}" >> $GITHUB_ENV
+          
+      - name: Restore whl
+        id: restore_whl
+        uses: actions/cache@v3
+        with:
+          path: dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}
+          key: ${{ env.MIN_PY_VER }}_${{ env.APP_DIR }}_${{ github.run_id }}
+
       - name: Publish to PyPI (Test)
-      #   if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           echo "packages_dir: dist/${{ env.MIN_PY_VER }}"
 
