@@ -162,7 +162,6 @@ jobs:
           echo "AWS_DOMAIN=mend-ps" >> $GITHUB_ENV
           echo "AWS_REPO=mend-ps-staging" >> $GITHUB_ENV
           
-        
       - name: Restore whl
         id: restore_whl
         uses: actions/cache@v3
@@ -177,24 +176,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      # - name: Upload to S3 Bucket
-      #   id: upload_s3_bucket
-      #   run: |
-      #     pip install -U s3pypi
-      #     TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
-      #     # S3_APP_DIR="${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}"
-      #     # echo aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}"
-      #     # echo aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "${{ env.APP_DIR }}/${TIMESTAMP}/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
-      #     # echo aws s3 cp "s3://${S3_APP_DIR}/${TIMESTAMP}/${{ env.WHL_NAME }}" "s3://${S3_APP_DIR}/latest/${{ env.WHL_NAME }}" --recursive --acl bucket-owner-full-control
-          
-      #     # S3_WHL_PATH="packages/${{ env.APP_DIR }}/${{ env.VERSION }}/${{ env.WHL_NAME }}"
-      #     # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${S3_WHL_PATH}"
-      #     # aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "$S3_WHL_PATH" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
-
-      #     # aws s3 cp "dist/${{ env.MIN_PY_VER }}/${{ env.WHL_NAME }}" "s3://${{ env.AWS_BUCKET }}/${{ env.APP_DIR }}/"
-      #     s3pypi --bucket ${{ env.AWS_BUCKET }} dist/${{ env.MIN_PY_VER }}/*
-      #     aws s3api put-object-tagging --bucket "${{ env.AWS_BUCKET }}" --key "$(echo ${{ env.APP_DIR }} | sed 's/_/-/g')/${{ env.WHL_NAME }}" --tagging "{\"TagSet\": [{\"Key\": \"User\", \"Value\": \"${{ github.actor }}\"},{\"Key\": \"Branch\", \"Value\": \"${{ env.SOURCE_BRANCH }}\"},{\"Key\": \"CommitId\", \"Value\": \"${{ github.sha }}\"}]}"
 
       - name: Configure AWS CodeArtifact
         id: config_aws_codeartifact
