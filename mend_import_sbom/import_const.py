@@ -25,7 +25,7 @@ class varenvs(Enum):  # Lit of Env.variables
     wsuserkey = ("WS_USERKEY", "MEND_USERKEY")
     wsapikey = ("MEND_APIKEY","WS_APIKEY","WS_TOKEN")
     wsurl = ("WS_WSS_URL","MEND_WSS_URL","WS_URL","MEND_URL")
-    wsscope = ("WS_SCO0PE","MEND_SCOPE")
+    wsscope = ("WS_SCOPE","MEND_SCOPE")
     wsproduct = ("WS_PRODUCTTOKEN", "MEND_PRODUCTTOKEN")
 
     @classmethod
