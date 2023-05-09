@@ -6,13 +6,14 @@ import json
 import logging
 import os
 import sys
-import http.client
 import re
 import hashlib
+import requests
+
 from ws_sdk import web, WS
 
 from mend_import_sbom._version import __version__, __tool_name__, __description__
-from mend_import_sbom.import_const import SHA1CalcType, aliases, varenvs
+from mend_import_sbom.import_const import SHA1CalcType, aliases, varenvs, Templates
 
 logger = logging.getLogger(__tool_name__)
 logger.setLevel(logging.DEBUG)
@@ -79,6 +80,14 @@ def parse_args():
                         default=varenvs.get_env("wsurl"), required=not varenvs.get_env("wsurl"))
     parser.add_argument('--offline', help="Create update request file without uploading", dest='offline',
                         default=os.environ.get("WS_OFFLINE", 'false'))
+    parser.add_argument('--multilang', help="Search library in all possible programming languages", dest='multilang',
+                        default=os.environ.get("WS_MULTILANG", 'true'))
+    parser.add_argument('--proxy', help="Proxy URL", dest='proxy',
+                        default=os.environ.get("HTTP_PROXY", ''))
+    parser.add_argument('--proxyUsername', help="Proxy Username", dest='proxyuser',
+                        default=os.environ.get("HTTP_PROXY_USERNAME", ''))
+    parser.add_argument('--proxyPassword', help="Proxy Password", dest='proxypsw',
+                        default=os.environ.get("HTTP_PROXY_PASSWORD", 'true'))
     arguments = parser.parse_args()
 
     return arguments
@@ -174,7 +183,7 @@ def csv_to_json(csv_file):
 
 
 def create_body(args):
-    def create_add_sha1(langtype=""):  # maybe we will need to calculate additional sha1 later
+    def create_add_sha1(langtype : str, lib_name : str, lib_ver : str):  # maybe we will need to calculate additional sha1 later
         logger.debug(f'[{fn()}] langtype={langtype}')
         pkg_str = ""
         try:
@@ -182,20 +191,11 @@ def create_body(args):
                 if ext_ref['referenceCategory'] == "PACKAGE_MANAGER":
                     pkgname = re.search(r"pkg:(.*?)/", ext_ref['referenceLocator'], flags=re.DOTALL).group(1).strip()
                     lang_type = SHA1CalcType.get_package_type(f_t=pkgname)
-                    if lang_type.lower_case == "y":
-                        pkg_str = f"{package['name'].lower()}_{package['versionInfo'].lower()}_{lang_type.language}"
-                    else:
-                        pkg_str = f"{package['name']}_{package['versionInfo']}_{lang_type.language}"
+                    pkg_str = f"{lib_name.lower()}_{lib_ver.lower()}_{lang_type.language}" if lang_type.lower_case == "y" else f"{lib_name}_{lib_ver}_{lang_type.language} "
                     break
-        except Exception as err:
-            if langtype == "":
-                return ""
-            else:
-                if SHA1CalcType.get_package_data(lng=langtype) == "y":
-                    pkg_str = f"{package['name'].lower()}_{package['versionInfo'].lower()}_{langtype}"
-                else:
-                    pkg_str = f"{package['name']}_{package['versionInfo']}_{langtype}"
-        return hashlib.sha1(pkg_str.encode("utf-8")).hexdigest()
+        except Exception:
+            pkg_str = f"{lib_name.lower()}_{lib_ver.lower()}_{langtype}" if SHA1CalcType.get_package_data(lng=langtype) == "y" else f"{lib_name}_{lib_ver}_{langtype}"
+        return hashlib.sha1(pkg_str.encode("utf-8")).hexdigest() if langtype else ""
 
     def get_pkg_parent(pkg_child: str):  # Will be needed for uploading source files
         logger.debug(f'[{fn()}] pkg_child={pkg_child}')
@@ -234,6 +234,24 @@ def create_body(args):
         logger.debug(f'[{fn()}] Result: sha1={sha1}, lname={lname}, error_code={error_code}, error_msg={error_msg}')
         return sha1, lname, error_code, error_msg
 
+    def update_template_data(creator : str, lib_name : str, lib_ver : str):
+        lname_ = ""
+        lver_ = ""
+        ltype_ = ""
+        for tmpl_ in Templates:
+            if tmpl_.name in creator.lower():
+                lname_ = lib_name[lib_name.find(tmpl_.value[0])+1:]
+                ltype_ = lib_name[0:lib_name.find(tmpl_.value[0])]
+                for el_ver_ in tmpl_.value[1].split(","):
+                    lver_ = lver_.replace(el_ver_,"") if lver_ else lib_ver.replace(el_ver_,"")
+                break
+        return lname_.strip() if lname_ else lib_name, lver_.strip() if lver_ else lib_ver, ltype_
+
+    def get_lang_data(creator_):
+        for pkg_type_ in SHA1CalcType:
+            if pkg_type_.libtype in creator_.lower():
+                return pkg_type_
+        return None
     ts = round(datetime.datetime.now().timestamp())
     global relations
     global pkgs
@@ -242,6 +260,7 @@ def create_body(args):
     relations = []
     added_el = []
     dep = []
+    pkg_top = ""
     PrjID = args.ws_project if (not args.scope_token) else args.scope_token
     logger.debug(f'[{fn()}] ts={ts}, PrjID={PrjID}')
 
@@ -268,16 +287,24 @@ def create_body(args):
         for rel_ in sbom["relationships"]:
             if rel_['relationshipType'] == "DEPENDS_ON":
                 relations.append({rel_['spdxElementId']: rel_['relatedSpdxElement']})
-    except Exception as err:
+    except Exception:
         logger.debug(f'[{fn()}] "relationships" block not found, skipping')
 
     pkgs = try_or_error(lambda: sbom["packages"], sbom)  # from JSON or from CSV
     logger.debug(f'[{fn()}] Adding dependencies')
+    creator = ""
+    for create_ in try_or_error(lambda: sbom["creationInfo"]["creators"], []):
+        if "Tool:" in create_:
+            creator = create_
     for package in pkgs:
-        sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}", '')
+        pkg_type_creator = get_lang_data(creator)  # Get info about possible package type from creator info
+        algorithm = try_or_error(lambda: f"{package['checksums'][0]['algorithm']}", '')
+        sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}", '') if algorithm == "SHA1" or algorithm == "SHA-1" else ""
         pkg_name = try_or_error(lambda: package["packageFileName"], package["name"])
         pkg_ver = try_or_error(lambda: package['versionInfo'], '')
+        pkg_name, pkg_ver, pkg_type = update_template_data(creator=creator, lib_name=pkg_name,lib_ver=pkg_ver)  # If we know how made library name by creation tool
         pkg_id = f'{pkg_name}-{pkg_ver}' if pkg_ver else pkg_name
+        download_loc = try_or_error(lambda: package["downloadLocation"], '')
 
         if sha1:
             pck = {
@@ -306,32 +333,38 @@ def create_body(args):
                                             flags=re.DOTALL).group(1).strip()
                         pkg_data = SHA1CalcType.get_package_type(f_t=pkgname)
                         if pkg_data:
-                            lang_types.append({pkg_data.libtype: pkg_data.ext})
+                            lang_types.append((0,{pkg_data.libtype: pkg_data.ext}))
                             break
             except:
                 try:
                     if pkg_name != "NOASSERTION":
+                        if not pkg_type_creator and pkg_type:  # If nothing from creator but got package type from library name
+                            pkg_type_creator = try_or_error(lambda: SHA1CalcType.get_el_by_name(name=pkg_type), None)
                         ext_name = os.path.splitext(pkg_name)[1][1:]
-                        if ext_name == "":  # type of extension was not provided. Taken all possible types
-                            for calctype_ in SHA1CalcType:
-                                lang_types.append({calctype_.libtype: calctype_.ext})
+                        ext_name = ext_name if ext_name else os.path.splitext(download_loc)[1][1:]
+                        # Trying to get ext from download link if not found before
+                        type_lst = SHA1CalcType.get_package_type_list_by_ext(ext=ext_name) if ext_name else None
+                        if type_lst:
+                            for type_lst_ in type_lst:
+                                lang_types.append((0, {type_lst_.libtype: type_lst_.ext}))
                         else:
-                            type_lst = SHA1CalcType.get_package_type_list_by_ext(ext=ext_name)
-                            if type_lst == []:
+                            if args.multilang.lower() == "true" or not pkg_type_creator:
                                 for calctype_ in SHA1CalcType:  # Could not identify library extension
                                     # (could be part of the package name)
-                                    lang_types.append({calctype_.libtype: calctype_.ext})
+                                    lang_types.append((0 if calctype_.libtype == pkg_top else calctype_.order,
+                                                       {calctype_.libtype: calctype_.ext}))
                             else:
-                                for type_lst_ in type_lst:
-                                    lang_types.append({type_lst_.libtype: type_lst_.ext})
+                                lang_types.append((0 if pkg_type_creator.libtype == pkg_top else pkg_type_creator.order,
+                                                   {pkg_type_creator.libtype: pkg_type_creator.ext}))
                 except:
                     pass
 
             sha1_ = ""
             res_err_msg = ""
             logger.info(f'[{fn()}] Mend library search: {pkg_id}')
+            lang_types.sort(key= lambda m: m[0])
             for l_type in lang_types:
-                for key, value in l_type.items():
+                for key, value in l_type[1].items():
                     if pkg_ver:
                         sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pkg_name, lib_ver=pkg_ver, lib_type=key)
                         res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
@@ -352,11 +385,13 @@ def create_body(args):
                         },
                         "dependencyFile": ""
                     }
+                    pkg_top = key
                     break
             if sha1_ == "" and pkg_name != "NOASSERTION":
                 logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else err_msg_}")
 
-        if pck and pkg_name not in added_el:
+        if pck != {}:
+            if pkg_name not in added_el:
                 added_el.append(f"{pkg_name}")  # we add element to list if was not added before
                 dep.append(add_child(pck))
                 logger.debug(f'[{fn()}] Dependency added: {pkg_id}, sha1: {sha1}')
@@ -382,8 +417,8 @@ def create_body(args):
     return {
         "updateType": f"{args.update_type}",
         "type": "UPDATE",
-        "agent": "fs-agent",
-        "agentVersion": "",
+        "agent": f"{__tool_name__.replace('_', '-')}",
+        "agentVersion": f"{__version__}",
         "pluginVersion": "",
         "orgToken": f"{args.ws_token}",
         "userKey": f"{args.ws_user_key}",
@@ -435,11 +470,17 @@ def get_file_by_spdx(spdx, sbom_f):
     return file_data
 
 
+def analyze_proxy(proxy : str):
+    proxy_ = proxy.replace("https://","").replace("http://","")
+    if "@" not in proxy_ and args.proxyuser and args.proxypsw:
+        proxy_ = f"{args.proxyuser}:{args.proxypsw}@"+proxy_
+    return proxy_
+
+
 def upload_to_mend(upload):
     ts = round(datetime.datetime.now().timestamp())
     ret = None
     try:
-        conn = http.client.HTTPSConnection(f"{extract_url(args.ws_url)[8:]}")
         json_prj = json.dumps(upload['projects'])  # API understands just JSON Array type, not simple List
         upload_projects = [proj["coordinates"]["artifactId"] for proj in upload["projects"]]
         if len(upload_projects) > 1:
@@ -448,11 +489,18 @@ def upload_to_mend(upload):
         else:
             logger.debug(f'[{fn()}] Uploading project:  {upload_projects[0]}')
 
-        payload = f"type=UPDATE&updateType={args.update_type}&agent=fs-agent&agentVersion=1.0&token={args.ws_token}&" \
+        payload = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
                   f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        conn.request("POST", "/agent", payload, headers)
-        data = json.loads(conn.getresponse().read())
+        proxy = analyze_proxy(args.proxy) if args.proxy else ""
+        proxies = {"https": f"http://{proxy}", "http": f"http://{proxy}"} if proxy else {}
+        resp = requests.post(
+            url=f"{extract_url(args.ws_url)}/agent",
+            data=payload,
+            headers=headers,
+            proxies=proxies)
+
+        data = json.loads(resp.content)  # json.loads(conn.getresponse().read())
         data_json = json.loads(data["data"])
         data_json["product"] = upload.get("product")
         logger.debug(f'[{fn()}] Response:\n{json.dumps(data_json, indent=2)}')
@@ -460,7 +508,6 @@ def upload_to_mend(upload):
             ret = data_json
         else:
             logger.error(f"Mend update request failed: {data['message']} ({data['data']})")
-        conn.close()
     except Exception as err:
         logger.error(f"Upload failed: {err}")
     return ret
