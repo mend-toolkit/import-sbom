@@ -10,14 +10,13 @@ import re
 import hashlib
 import requests
 
-from ws_sdk import web, WS
-
 from mend_import_sbom._version import __version__, __tool_name__, __description__
 from mend_import_sbom.import_const import SHA1CalcType, aliases, varenvs, Templates
+from importlib import metadata
 
 logger = logging.getLogger(__tool_name__)
 logger.setLevel(logging.DEBUG)
-is_debug = logging.DEBUG if os.environ.get("DEBUG") in ['True', 'true', "1"] else logging.INFO
+is_debug = logging.DEBUG if os.environ.get("DEBUG") in ['True', 'true', 'TRUE', "1"] else logging.INFO
 
 formatter = logging.Formatter('[%(asctime)s] %(levelname)5s %(message)s', "%Y-%m-%d %H:%M:%S")
 s_handler = logging.StreamHandler()
@@ -27,9 +26,11 @@ logger.addHandler(s_handler)
 logger.propagate = False
 
 APP_TITLE = "Mend SBOM Importer"
+API_VERSION = "1.4"
 DFLT_PRD_NAME = "Mend-Imports"
 UPDATE_REQUEST_FILE = "update-request.txt"
 PROJ_URL = '/Wss/WSS.html#!project;id='  # f'{WS_WSS_URL}/Wss/WSS.html#!project;id={PROJECT_ID}'
+TOOL_VER = __version__
 
 
 def try_or_error(supplier, msg):
@@ -64,31 +65,38 @@ def log_obj_props(obj, obj_title=""):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__description__)
-    parser.add_argument(*aliases.get_aliases_str("userkey"), help="Mend user key", dest='ws_user_key',
-                        default=varenvs.get_env("wsuserkey"), required=not varenvs.get_env("wsuserkey"))
-    parser.add_argument(*aliases.get_aliases_str("apikey"), help="Mend API key", dest='ws_token',
-                        default=varenvs.get_env("wsapikey"), required=not varenvs.get_env("wsapikey"))
-    parser.add_argument(*aliases.get_aliases_str("projectkey"), help="Mend product/project scope", dest='scope_token',
-                        default=varenvs.get_env("wsscope"))
-    parser.add_argument(*aliases.get_aliases_str("sbom"), help="SBOM Report for upload (*.json|*.csv)", dest='sbom',
-                        required=True, default=os.environ.get("SBOM", ''))
-    parser.add_argument('--updateType', help="Update type", dest='update_type',
-                        default=os.environ.get("WS_UPDATETYPE", 'OVERRIDE'))
-    parser.add_argument(*aliases.get_aliases_str("output"), help="Output directory", dest='out_dir',
-                        default=os.getcwd())
-    parser.add_argument(*aliases.get_aliases_str("url"), help="Mend server URL", dest='ws_url',
-                        default=varenvs.get_env("wsurl"), required=not varenvs.get_env("wsurl"))
-    parser.add_argument('--offline', help="Create update request file without uploading", dest='offline',
-                        default=os.environ.get("WS_OFFLINE", 'false'))
-    parser.add_argument('--multilang', help="Search library in all possible programming languages", dest='multilang',
-                        default=os.environ.get("WS_MULTILANG", 'true'))
-    parser.add_argument('--proxy', help="Proxy URL", dest='proxy',
-                        default=os.environ.get("HTTP_PROXY", ''))
-    parser.add_argument('--proxyUsername', help="Proxy Username", dest='proxyuser',
-                        default=os.environ.get("HTTP_PROXY_USERNAME", ''))
-    parser.add_argument('--proxyPassword', help="Proxy Password", dest='proxypsw',
-                        default=os.environ.get("HTTP_PROXY_PASSWORD", 'true'))
-    arguments = parser.parse_args()
+    got_args = parser.parse_known_args()
+    if len(got_args[1]) == 1 and got_args[1][0] == "--version":
+        parser.add_argument('--version', help="Current version", action='store_true')
+    else:
+        parser.add_argument(*aliases.get_aliases_str("userkey"), help="Mend user key", dest='ws_user_key',
+                            default=varenvs.get_env("wsuserkey"), required=not varenvs.get_env("wsuserkey"))
+        parser.add_argument(*aliases.get_aliases_str("apikey"), help="Mend API key", dest='ws_token',
+                            default=varenvs.get_env("wsapikey"), required=not varenvs.get_env("wsapikey"))
+        parser.add_argument(*aliases.get_aliases_str("projectkey"), help="Mend product/project scope",
+                            dest='scope_token',
+                            default=varenvs.get_env("wsscope"))
+        parser.add_argument(*aliases.get_aliases_str("sbom"), help="SBOM Report for upload (*.json|*.csv)", dest='sbom',
+                            required=True, default=os.environ.get("SBOM", ''))
+        parser.add_argument('--updateType', help="Update type", dest='update_type',
+                            default=os.environ.get("WS_UPDATETYPE", 'OVERRIDE'))
+        parser.add_argument(*aliases.get_aliases_str("output"), help="Output directory", dest='out_dir',
+                            default=os.getcwd())
+        parser.add_argument(*aliases.get_aliases_str("url"), help="Mend server URL", dest='ws_url',
+                            default=varenvs.get_env("wsurl"), required=not varenvs.get_env("wsurl"))
+        parser.add_argument('--offline', help="Create update request file without uploading", dest='offline',
+                            default=os.environ.get("WS_OFFLINE", 'false'))
+        parser.add_argument('--multilang', help="Search library in all possible programming languages",
+                            dest='multilang',
+                            default=os.environ.get("WS_MULTILANG", 'true'))
+        parser.add_argument('--proxy', help="Proxy URL", dest='proxy',
+                            default=os.environ.get("HTTP_PROXY", ''))
+        parser.add_argument('--proxyUsername', help="Proxy Username", dest='proxyuser',
+                            default=os.environ.get("HTTP_PROXY_USERNAME", ''))
+        parser.add_argument('--proxyPassword', help="Proxy Password", dest='proxypsw',
+                            default=os.environ.get("HTTP_PROXY_PASSWORD", 'true'))
+
+    arguments = parser.parse_known_args()[0]
 
     return arguments
 
@@ -182,8 +190,24 @@ def csv_to_json(csv_file):
     return dep
 
 
+def run_api(header, data, agent=False):
+    res = ""
+    try:
+        proxy = analyze_proxy(args.proxy) if args.proxy else ""
+        proxies = {"https": f"http://{proxy}", "http": f"http://{proxy}"} if proxy else {}
+        res = requests.post(
+            url=f"{extract_url(args.ws_url)}/agent" if agent else f"{extract_url(args.ws_url)}/api/v{API_VERSION}",
+            data=data,
+            headers=header,
+            proxies=proxies).text
+    except Exception as err:
+        logger.debug(f'[{fn()}] {err}')
+    return res
+
+
 def create_body(args):
-    def create_add_sha1(langtype : str, lib_name : str, lib_ver : str):  # maybe we will need to calculate additional sha1 later
+    def create_add_sha1(langtype: str, lib_name: str,
+                        lib_ver: str):  # maybe we will need to calculate additional sha1 later
         logger.debug(f'[{fn()}] langtype={langtype}')
         pkg_str = ""
         try:
@@ -193,8 +217,9 @@ def create_body(args):
                     lang_type = SHA1CalcType.get_package_type(f_t=pkgname)
                     pkg_str = f"{lib_name.lower()}_{lib_ver.lower()}_{lang_type.language}" if lang_type.lower_case == "y" else f"{lib_name}_{lib_ver}_{lang_type.language} "
                     break
-        except Exception:
-            pkg_str = f"{lib_name.lower()}_{lib_ver.lower()}_{langtype}" if SHA1CalcType.get_package_data(lng=langtype) == "y" else f"{lib_name}_{lib_ver}_{langtype}"
+        except Exception as err:
+            pkg_str = f"{lib_name.lower()}_{lib_ver.lower()}_{langtype}" if SHA1CalcType.get_package_data(
+                lng=langtype) == "y" else f"{lib_name}_{lib_ver}_{langtype}"
         return hashlib.sha1(pkg_str.encode("utf-8")).hexdigest() if langtype else ""
 
     def get_pkg_parent(pkg_child: str):  # Will be needed for uploading source files
@@ -216,34 +241,44 @@ def create_body(args):
         error_code = 0
         error_msg = ""
         try:
-            lib_lst = web.WS.call_ws_api(self=args.ws_conn, request_type="getBasicLibraryInfo",
-                                         kv_dict={"libraryName": lib_name, "libraryVersion": lib_ver,
-                                                  "libraryType": lib_type})
-            for lib_ in lib_lst["librariesInformation"]:
-                sha1 = try_or_error(lambda: lib_["sha1"], '')
-                lname = try_or_error(lambda: lib_["artifactId"], '')
-                break
+            header = {"Content-Type": "application/json"}
+            data = json.dumps(
+                {"requestType": "getBasicLibraryInfo",
+                 "userKey": args.ws_user_key,
+                 "orgToken": args.ws_token,
+                 "libraryName": lib_name,
+                 "libraryVersion": lib_ver,
+                 "libraryType": lib_type})
+            lib_lst = json.loads(run_api(header=header, data=data))
+            try:
+                for lib_ in lib_lst["librariesInformation"]:
+                    sha1 = try_or_error(lambda: lib_["sha1"], '')
+                    lname = try_or_error(lambda: lib_["artifactId"], '')
+                    break
+            except:
+                if lib_lst["errorCode"] == 5001:  # User has no permissions. Don't need to continue execution
+                    logger.error(f'[{fn()}] Error Code: {lib_lst["errorCode"]}. Message: {lib_lst["errorMessage"]}')
+                    exit(-1)
+                else:
+                    logger.info(f'[{fn()}] {lib_lst["errorMessage"]}')
+                    error_code = lib_lst["errorCode"]
+                    error_msg = lib_lst["errorMessage"]
         except Exception as err:
-            err_ = str(err)
-            if 'has insufficient permissions' in err_:  # Executes response from WS SDK
-                logger.debug(f'[{fn()}] {err_}')
-                exit(-1)  # In this case don't need to continue execution
-            else:
-                error_code = try_or_error(lambda: json.loads(err_[err_.index("Error:")+6:])["errorCode"], 4000)  # Getting result as string, need to parse it. 4000 is Unexpected error
-                error_msg = try_or_error(lambda: json.loads(err_[err_.index("Error:") + 6:])["errorMessage"], err_)
-        logger.debug(f'[{fn()}] Result: sha1={sha1}, lname={lname}, error_code={error_code}, error_msg={error_msg}')
+            logger.error(f'[{fn()}] {str(err)}')
+            exit(-1)  # In this case don't need to continue execution
+        logger.debug(f'[{fn()}] Result: sha1={sha1}, libname={lname}, error_code={error_code}, error_msg={error_msg}')
         return sha1, lname, error_code, error_msg
 
-    def update_template_data(creator : str, lib_name : str, lib_ver : str):
+    def update_template_data(creator: str, lib_name: str, lib_ver: str):
         lname_ = ""
         lver_ = ""
         ltype_ = ""
         for tmpl_ in Templates:
             if tmpl_.name in creator.lower():
-                lname_ = lib_name[lib_name.find(tmpl_.value[0])+1:]
+                lname_ = lib_name[lib_name.find(tmpl_.value[0]) + 1:]
                 ltype_ = lib_name[0:lib_name.find(tmpl_.value[0])]
                 for el_ver_ in tmpl_.value[1].split(","):
-                    lver_ = lver_.replace(el_ver_,"") if lver_ else lib_ver.replace(el_ver_,"")
+                    lver_ = lver_.replace(el_ver_, "") if lver_ else lib_ver.replace(el_ver_, "")
                 break
         return lname_.strip() if lname_ else lib_name, lver_.strip() if lver_ else lib_ver, ltype_
 
@@ -252,6 +287,7 @@ def create_body(args):
             if pkg_type_.libtype in creator_.lower():
                 return pkg_type_
         return None
+
     ts = round(datetime.datetime.now().timestamp())
     global relations
     global pkgs
@@ -261,8 +297,8 @@ def create_body(args):
     added_el = []
     dep = []
     pkg_top = ""
-    PrjID = args.ws_project if (not args.scope_token) else args.scope_token
-    logger.debug(f'[{fn()}] ts={ts}, PrjID={PrjID}')
+    prj_id = args.ws_project if (not args.scope_token) else args.scope_token
+    logger.debug(f'[{fn()}] ts={ts}, prj_id={prj_id}')
 
     try:
         if os.path.splitext(args.sbom)[1] == ".csv":
@@ -272,13 +308,13 @@ def create_body(args):
             logger.debug(f'[{fn()}] Parsing JSON file: {args.sbom}')
             with open(args.sbom, "r", encoding="utf-8") as f:
                 sbom = json.load(f)
-            PrjID = try_or_error(lambda: sbom["name"], '') if (not PrjID) else PrjID
-            logger.debug(f'[{fn()}] PrjID: {PrjID}')
+            prj_id = try_or_error(lambda: sbom["name"], '') if (not prj_id) else prj_id
+            logger.debug(f'[{fn()}] prj_id: {prj_id}')
     except Exception as err:
         logger.error(f'[{fn()}] Unable to parse input file: {err}')
         exit(-1)
 
-    if not PrjID:
+    if not prj_id:
         logger.error(f'[{fn()}] Scope must include either project name or project token')
         exit(-1)
 
@@ -287,7 +323,7 @@ def create_body(args):
         for rel_ in sbom["relationships"]:
             if rel_['relationshipType'] == "DEPENDS_ON":
                 relations.append({rel_['spdxElementId']: rel_['relatedSpdxElement']})
-    except Exception:
+    except Exception as err:
         logger.debug(f'[{fn()}] "relationships" block not found, skipping')
 
     pkgs = try_or_error(lambda: sbom["packages"], sbom)  # from JSON or from CSV
@@ -299,12 +335,17 @@ def create_body(args):
     for package in pkgs:
         pkg_type_creator = get_lang_data(creator)  # Get info about possible package type from creator info
         algorithm = try_or_error(lambda: f"{package['checksums'][0]['algorithm']}", '')
-        sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}", '') if algorithm == "SHA1" or algorithm == "SHA-1" else ""
+        sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}",
+                            '') if algorithm == "SHA1" or algorithm == "SHA-1" else ""
+
         pkg_name = try_or_error(lambda: package["packageFileName"], package["name"])
         pkg_ver = try_or_error(lambda: package['versionInfo'], '')
-        pkg_name, pkg_ver, pkg_type = update_template_data(creator=creator, lib_name=pkg_name,lib_ver=pkg_ver)  # If we know how made library name by creation tool
+        pkg_name, pkg_ver, pkg_type = update_template_data(creator=creator, lib_name=pkg_name, lib_ver=pkg_ver)
+        # If we know how made library name by creation tool
         pkg_id = f'{pkg_name}-{pkg_ver}' if pkg_ver else pkg_name
         download_loc = try_or_error(lambda: package["downloadLocation"], '')
+        if algorithm and not sha1:
+            logger.debug(f'[{fn()}] No SHA1 ({algorithm}) algorithm was found for library {pkg_name}')
 
         if sha1:
             pck = {
@@ -333,7 +374,7 @@ def create_body(args):
                                             flags=re.DOTALL).group(1).strip()
                         pkg_data = SHA1CalcType.get_package_type(f_t=pkgname)
                         if pkg_data:
-                            lang_types.append((0,{pkg_data.libtype: pkg_data.ext}))
+                            lang_types.append((0, {pkg_data.libtype: pkg_data.ext}))
                             break
             except:
                 try:
@@ -362,11 +403,12 @@ def create_body(args):
             sha1_ = ""
             res_err_msg = ""
             logger.info(f'[{fn()}] Mend library search: {pkg_id}')
-            lang_types.sort(key= lambda m: m[0])
+            lang_types.sort(key=lambda m: m[0])
             for l_type in lang_types:
                 for key, value in l_type[1].items():
                     if pkg_ver:
-                        sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pkg_name, lib_ver=pkg_ver, lib_type=key)
+                        sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pkg_name, lib_ver=pkg_ver,
+                                                                           lib_type=key)
                         res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
                     else:
                         sha1_ = ""
@@ -408,7 +450,7 @@ def create_body(args):
         prj = [
             {
                 "coordinates": {
-                    "artifactId": f"{PrjID}"
+                    "artifactId": f"{prj_id}"
                 },
                 "dependencies": dep
             }
@@ -437,7 +479,7 @@ def get_files_from_pck(pck, sbom_f):
     except:
         files = []
     for file_ in files:
-        file_lst.append(get_file_by_spdx(file_,sbom_f))
+        file_lst.append(get_file_by_spdx(file_, sbom_f))
     return file_lst
 
 
@@ -450,8 +492,8 @@ def get_file_by_spdx(spdx, sbom_f):
             break
 
     if sbom_f_:
-        sha1 = try_or_error(lambda: f"{sbom_f_['checksums'][0]['checksumValue']}","")
-        vers = try_or_error(lambda: f"{sbom_f_['versionInfo']}","")
+        sha1 = try_or_error(lambda: f"{sbom_f_['checksums'][0]['checksumValue']}", "")
+        vers = try_or_error(lambda: f"{sbom_f_['versionInfo']}", "")
         try:
             file_data = {
                 "artifactId": f"{spdx}",
@@ -470,10 +512,10 @@ def get_file_by_spdx(spdx, sbom_f):
     return file_data
 
 
-def analyze_proxy(proxy : str):
-    proxy_ = proxy.replace("https://","").replace("http://","")
+def analyze_proxy(proxy: str):
+    proxy_ = proxy.replace("https://", "").replace("http://", "")
     if "@" not in proxy_ and args.proxyuser and args.proxypsw:
-        proxy_ = f"{args.proxyuser}:{args.proxypsw}@"+proxy_
+        proxy_ = f"{args.proxyuser}:{args.proxypsw}@" + proxy_
     return proxy_
 
 
@@ -489,18 +531,11 @@ def upload_to_mend(upload):
         else:
             logger.debug(f'[{fn()}] Uploading project:  {upload_projects[0]}')
 
-        payload = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
-                  f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        proxy = analyze_proxy(args.proxy) if args.proxy else ""
-        proxies = {"https": f"http://{proxy}", "http": f"http://{proxy}"} if proxy else {}
-        resp = requests.post(
-            url=f"{extract_url(args.ws_url)}/agent",
-            data=payload,
-            headers=headers,
-            proxies=proxies)
+        data = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
+               f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
+        header = {'Content-Type': 'application/x-www-form-urlencoded'}
+        data = json.loads(run_api(header=header, data=data, agent=True))
 
-        data = json.loads(resp.content)  # json.loads(conn.getresponse().read())
         data_json = json.loads(data["data"])
         data_json["product"] = upload.get("product")
         logger.debug(f'[{fn()}] Response:\n{json.dumps(data_json, indent=2)}')
@@ -540,8 +575,14 @@ def analyse_scope(scope: str):
     if prj_name:
         logger.debug(f'[{fn()}] Attempting to resolve project scope')
         try:
-            rt = WS.call_ws_api(self=args.ws_conn, request_type="getProjectVitals",
-                                kv_dict={"projectToken": prj_name})
+            header = {"Content-Type": "application/json"}
+            data = json.dumps(
+                {"requestType": "getProjectVitals",
+                 "userKey": args.ws_user_key,
+                 "orgToken": args.ws_token,
+                 "projectToken": prj_name
+                 })
+            rt = json.loads(run_api(header=header, data=data))
             args.scope_token = rt['projectVitals'][0]['token']
             args.ws_product = ""
             logger.debug(f'[{fn()}] Project token: {args.scope_token}')
@@ -552,49 +593,49 @@ def analyse_scope(scope: str):
 
 
 def main():
-    global output_json
     global args
+    global TOOL_VER
     output_json = {}
 
     hdr_title = f'{APP_TITLE} {__version__}'
-    hdr = f'\n{len(hdr_title)*"="}\n{hdr_title}\n{len(hdr_title)*"="}'
+    hdr = f'\n{len(hdr_title) * "="}\n{hdr_title}\n{len(hdr_title) * "="}'
     logger.info(hdr)
 
     try:
         args = parse_args()
-        log_obj_props(args, "Configuration:")
-
-        args.ws_conn = web.WSApp(url=f"{extract_url(args.ws_url)}",
-                                 user_key=args.ws_user_key,
-                                 token=args.ws_token,
-                                 tool_details=(f"ps-{__tool_name__.replace('_', '-')}", __version__))
-        log_obj_props(args.ws_conn, "WSApp connection:")
-
-        if not os.path.isfile(args.sbom):
-            logger.error(f'[{fn()}] Input file does not exist: {args.out_dir}')
-            exit(-1)
-
-        if not os.path.isdir(args.out_dir):
-            logger.info(f'[{fn()}] Creating output directory: {args.out_dir}')
-            try:
-                os.mkdir(args.out_dir)
-            except Exception as err:
-                logger.error(f'[{fn()}] {err}')
+        TOOL_VER = try_or_error(lambda: args.version, False)
+        if TOOL_VER:
+            # Just show current version
+            logger.info(
+                f"Current version of mend_{__tool_name__}: {try_or_error(lambda: metadata.version(f'mend_{__tool_name__}'), __version__)}")
+            exit(0)
+        else:
+            log_obj_props(args, "Configuration:")
+            if not os.path.isfile(args.sbom):
+                logger.error(f'[{fn()}] Input file does not exist: {args.out_dir}')
                 exit(-1)
 
-        logger.info(f'[{fn()}] Generating update request')
-        full_path = os.path.join(args.out_dir, UPDATE_REQUEST_FILE)
+            if not os.path.isdir(args.out_dir):
+                logger.info(f'[{fn()}] Creating output directory: {args.out_dir}')
+                try:
+                    os.mkdir(args.out_dir)
+                except Exception as err:
+                    logger.error(f'[{fn()}] {err}')
+                    exit(-1)
 
-        logger.debug(f'[{fn()}] Resolving project scope')
-        analyse_scope(args.scope_token)
+            logger.info(f'[{fn()}] Generating update request')
+            full_path = os.path.join(args.out_dir, UPDATE_REQUEST_FILE)
 
-        logger.debug(f'[{fn()}] Generating json body')
-        output_json = create_body(args)
+            logger.debug(f'[{fn()}] Resolving project scope')
+            analyse_scope(args.scope_token)
 
-        logger.debug(f'[{fn()}] Creating update request file')
-        with open(full_path, 'w') as outfile:
-            json.dump(output_json, outfile, indent=4)
-        logger.info(f'[{fn()}] Update request created successfully: {full_path}')
+            logger.debug(f'[{fn()}] Generating json body')
+            output_json = create_body(args)
+
+            logger.debug(f'[{fn()}] Creating update request file')
+            with open(full_path, 'w') as outfile:
+                json.dump(output_json, outfile, indent=4)
+            logger.info(f'[{fn()}] Update request created successfully: {full_path}')
     except Exception as err:
         logger.error(f'[{fn()}] Failed to create update request file: {err}')
         exit(-1)
@@ -627,6 +668,7 @@ def main():
 
     except Exception as err:
         logger.error(f"Upload failed: {err}")
+        exit(-1)
 
 
 if __name__ == '__main__':
