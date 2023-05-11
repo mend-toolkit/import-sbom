@@ -66,7 +66,7 @@ def log_obj_props(obj, obj_title=""):
 def parse_args():
     parser = argparse.ArgumentParser(description=__description__)
     got_args = parser.parse_known_args()
-    if len(got_args[1]) == 1 and got_args[1][0] == "--version":
+    if len(got_args[1]) == 1 and got_args[1][0] in ["--version", "-v"]:
         parser.add_argument('--version', help="Current version", action='store_true')
     else:
         parser.add_argument(*aliases.get_aliases_str("userkey"), help="Mend user key", dest='ws_user_key',
