@@ -67,7 +67,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__description__)
     got_args = parser.parse_known_args()
     if len(got_args[1]) == 1 and got_args[1][0] in ["--version", "-v"]:
-        parser.add_argument('--version', help="Current version", action='store_true')
+        parser.add_argument(*aliases.get_aliases_str("version"), help="Current version", action='store_true')
     else:
         parser.add_argument(*aliases.get_aliases_str("userkey"), help="Mend user key", dest='ws_user_key',
                             default=varenvs.get_env("wsuserkey"), required=not varenvs.get_env("wsuserkey"))
@@ -96,9 +96,7 @@ def parse_args():
         parser.add_argument('--proxyPassword', help="Proxy Password", dest='proxypsw',
                             default=os.environ.get("HTTP_PROXY_PASSWORD", 'true'))
 
-    arguments = parser.parse_known_args()[0]
-
-    return arguments
+    return parser.parse_known_args()[0]
 
 
 def check_el_inlist(name: str) -> bool:  # Don't need to do this check now, might be needed in the future
@@ -190,12 +188,13 @@ def csv_to_json(csv_file):
     return dep
 
 
-def run_api(header, data, agent=False):
+def call_api(header, data, agent=False, method="POST"):
     res = ""
     try:
         proxy = analyze_proxy(args.proxy) if args.proxy else ""
         proxies = {"https": f"http://{proxy}", "http": f"http://{proxy}"} if proxy else {}
-        res = requests.post(
+        res = requests.request(
+            method=method,
             url=f"{extract_url(args.ws_url)}/agent" if agent else f"{extract_url(args.ws_url)}/api/v{API_VERSION}",
             data=data,
             headers=header,
@@ -249,7 +248,7 @@ def create_body(args):
                  "libraryName": lib_name,
                  "libraryVersion": lib_ver,
                  "libraryType": lib_type})
-            lib_lst = json.loads(run_api(header=header, data=data))
+            lib_lst = json.loads(call_api(header=header, data=data))
             try:
                 for lib_ in lib_lst["librariesInformation"]:
                     sha1 = try_or_error(lambda: lib_["sha1"], '')
@@ -534,7 +533,7 @@ def upload_to_mend(upload):
         data = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
                f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         header = {'Content-Type': 'application/x-www-form-urlencoded'}
-        data = json.loads(run_api(header=header, data=data, agent=True))
+        data = json.loads(call_api(header=header, data=data, agent=True))
 
         data_json = json.loads(data["data"])
         data_json["product"] = upload.get("product")
@@ -582,7 +581,7 @@ def analyse_scope(scope: str):
                  "orgToken": args.ws_token,
                  "projectToken": prj_name
                  })
-            rt = json.loads(run_api(header=header, data=data))
+            rt = json.loads(call_api(header=header, data=data))
             args.scope_token = rt['projectVitals'][0]['token']
             args.ws_product = ""
             logger.debug(f'[{fn()}] Project token: {args.scope_token}')
@@ -607,7 +606,7 @@ def main():
         if TOOL_VER:
             # Just show current version
             logger.info(
-                f"Current version of mend_{__tool_name__}: {try_or_error(lambda: metadata.version(f'mend_{__tool_name__}'), __version__)}")
+                f"mend_{__tool_name__} {try_or_error(lambda: metadata.version(f'mend_{__tool_name__}'), __version__)}")
             exit(0)
         else:
             log_obj_props(args, "Configuration:")
