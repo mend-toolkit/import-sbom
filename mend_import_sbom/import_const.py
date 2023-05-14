@@ -10,6 +10,7 @@ class aliases(Enum):  # List of aliases for params
     url = ("--url","--mendUrl")
     output = ("--out","--dir")
     sbom = ("--sbom","--input")
+    version = ("--version","-v")
 
     @classmethod
     def get_aliases_str(cls, key):
