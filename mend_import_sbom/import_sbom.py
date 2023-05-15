@@ -596,19 +596,18 @@ def main():
     global TOOL_VER
     output_json = {}
 
-    hdr_title = f'{APP_TITLE} {__version__}'
-    hdr = f'\n{len(hdr_title) * "="}\n{hdr_title}\n{len(hdr_title) * "="}'
-    logger.info(hdr)
-
     try:
         args = parse_args()
         TOOL_VER = try_or_error(lambda: args.version, False)
         if TOOL_VER:
             # Just show current version
-            logger.info(
-                f"mend_{__tool_name__} {try_or_error(lambda: metadata.version(f'mend_{__tool_name__}'), __version__)}")
+            print(f"mend_{__tool_name__} {try_or_error(lambda: metadata.version(f'mend_{__tool_name__}'), __version__)}")
             exit(0)
         else:
+            hdr_title = f'{APP_TITLE} {__version__}'
+            hdr = f'\n{len(hdr_title) * "="}\n{hdr_title}\n{len(hdr_title) * "="}'
+            logger.info(hdr)
+
             log_obj_props(args, "Configuration:")
             if not os.path.isfile(args.sbom):
                 logger.error(f'[{fn()}] Input file does not exist: {args.out_dir}')
