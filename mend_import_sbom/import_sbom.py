@@ -26,11 +26,12 @@ logger.addHandler(s_handler)
 logger.propagate = False
 
 APP_TITLE = "Mend SBOM Importer"
+APP_VERSION = metadata.version(f'mend_{__tool_name__}') if metadata.version(f'mend_{__tool_name__}') else __version__
 API_VERSION = "1.4"
 DFLT_PRD_NAME = "Mend-Imports"
 UPDATE_REQUEST_FILE = "update-request.txt"
 PROJ_URL = '/Wss/WSS.html#!project;id='  # f'{WS_WSS_URL}/Wss/WSS.html#!project;id={PROJECT_ID}'
-TOOL_VER = __version__
+AGENT_INFO = {"agent": f"{__tool_name__.replace('_', '-')}", "agentVersion": APP_VERSION}
 
 
 def try_or_error(supplier, msg):
@@ -188,8 +189,12 @@ def csv_to_json(csv_file):
     return dep
 
 
-def call_api(header, data, agent=False, method="POST"):
+def call_api(header, data, agent=False, method="POST", agent_info_login=False):
     res = ""
+    data["agentInfo"] = AGENT_INFO
+    if agent_info_login:
+        data["agentInfo"]["agent"] = AGENT_INFO["agent"].replace("ps-", "ps-login-")
+
     try:
         proxy = analyze_proxy(args.proxy) if args.proxy else ""
         proxies = {"https": f"http://{proxy}", "http": f"http://{proxy}"} if proxy else {}
@@ -499,8 +504,8 @@ def create_body(args):
     return {
         "updateType": f"{args.update_type}",
         "type": "UPDATE",
-        "agent": f"{__tool_name__.replace('_', '-')}",
-        "agentVersion": f"{__version__}",
+        "agent": AGENT_INFO["agent"],
+        "agentVersion": AGENT_INFO["agentVersion"],
         "pluginVersion": "",
         "orgToken": f"{args.ws_token}",
         "userKey": f"{args.ws_user_key}",
@@ -571,8 +576,9 @@ def upload_to_mend(upload):
         else:
             logger.debug(f'[{fn()}] Uploading project:  {upload_projects[0]}')
 
-        data = f"type=UPDATE&updateType={args.update_type}&agent={__tool_name__.replace('_', '-')}&agentVersion={__version__}&token={args.ws_token}&" \
-               f"userKey={args.ws_user_key}&product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
+        data = f'type=UPDATE&updateType={args.update_type}&agent={AGENT_INFO["agent"]}&' \
+               f'agentVersion={AGENT_INFO["agentVersion"]}&token={args.ws_token}&userKey={args.ws_user_key}&' \
+               f'product={args.ws_product}&timeStamp={ts}&diff={json_prj}'
         header = {'Content-Type': 'application/x-www-form-urlencoded'}
         data = json.loads(call_api(header=header, data=data, agent=True))
 
@@ -634,18 +640,16 @@ def analyse_scope(scope: str):
 
 def main():
     global args
-    global TOOL_VER
     output_json = {}
 
     try:
         args = parse_args()
-        TOOL_VER = try_or_error(lambda: args.version, False)
-        if TOOL_VER:
+        if try_or_error(lambda: args.version, False):
             # Just show current version
-            print(f"mend_{__tool_name__} {try_or_error(lambda: metadata.version(f'mend_{__tool_name__}'), __version__)}")
+            print(f'{AGENT_INFO["agent"]} {AGENT_INFO["agentVersion"]}')
             exit(0)
         else:
-            hdr_title = f'{APP_TITLE} {__version__}'
+            hdr_title = f'{APP_TITLE} {AGENT_INFO["agentVersion"]}'
             hdr = f'\n{len(hdr_title) * "="}\n{hdr_title}\n{len(hdr_title) * "="}'
             logger.info(hdr)
 
