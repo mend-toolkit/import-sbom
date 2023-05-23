@@ -234,6 +234,44 @@ def create_body(args):
             pass
         return res
 
+    def execute_pack_exe_list(package_list : list, exts : list): # Execute whole list of missed packages
+        res = []
+        for pck_ in package_list:
+            for pck_name, pck_ver in pck_.items():
+                logger.info(f'[{fn()}] Mend library search: {f"{pck_name}-{pck_ver}" if pck_ver else pck_name}')
+                res_err_msg = ""
+                br = False
+                for ext_ in exts:
+                    for key, value in ext_.items():
+                        if pkg_ver:
+                            sha1_, lname_, err_, err_msg_ = search_lib_by_name(lib_name=pck_name, lib_ver=pck_ver, lib_type=key)
+                            res_err_msg = err_msg_ if err_ == 3028 else res_err_msg  # Too many libraries were found
+                        else:
+                            sha1_ = ""
+                            lname_ = ""
+                            err_msg_ = ""
+                        # The start parallel running. Keep it for future
+                        #sha1_, lname_, err_, err_msg_, value = generic_thread_pool_search(lib_name=pkg_name,lib_ver=pkg_ver,l_types=lang_types,worker=search_lib_by_name)
+                        if sha1_:
+                            res.append( {
+                                "artifactId": f"{lname_}",
+                                "version": pkg_ver,
+                                "sha1": sha1_,
+                                "systemPath": "",
+                                "optional": False,
+                                "filename": f"{lname_}-{pkg_ver}.{value}",
+                                "checksums": {
+                                    "SHA1": sha1_
+                                },
+                                "dependencyFile": ""
+                            })
+                            br = True
+                    if br:
+                        break
+                if "NOASSERTION" not in pck_name and not sha1_:
+                    logger.info(f"Library not found: {f'{pck_name}-{pck_ver}' if pck_ver else pck_name}. {res_err_msg if res_err_msg else err_msg_}")
+        return res
+
     def search_lib_by_name(lib_name, lib_ver, lib_type):
         logger.debug(f'[{fn()}] Searching library: lib_name={lib_name}, lib_ver={lib_ver}, lib_type={lib_type}')
         sha1 = lname = ""
@@ -359,8 +397,11 @@ def create_body(args):
                 },
                 "dependencyFile": ""
             }
+            if pkg_name not in added_el:
+                added_el.append(pkg_name)  # we add element to list if was not added before
+                dep.append(add_child(pck))
+                logger.debug(f'[{fn()}] Dependency added: {pkg_id}, sha1: {sha1}')
         else:  # SHA1 not found
-            pck = {}
             lang_types = []
             logger.debug(f'[{fn()}] Attempting to resolve library by language type')
             try:
@@ -470,7 +511,7 @@ def create_body(args):
     }
 
 
-def get_files_from_pck(pck, sbom_f):
+def get_files_from_pck(pck, sbom_f): # Keep for future. Extracting files from Package
     file_lst = []
     try:
         f = pck['hasFiles']
