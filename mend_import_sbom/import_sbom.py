@@ -9,6 +9,7 @@ import sys
 import re
 import hashlib
 import requests
+import traceback
 
 from mend_import_sbom._version import __version__, __tool_name__, __description__
 from mend_import_sbom.import_const import SHA1CalcType, aliases, varenvs, Templates
@@ -51,6 +52,11 @@ def pn():
     return f'{pn_stack.function}:{pn_stack.lineno}'
 
 
+def ex():
+    e_type, e_msg, tb = sys.exc_info()
+    return f'{tb.tb_frame.f_code.co_name}:{tb.tb_lineno}'
+
+
 def log_obj_props(obj, obj_title=""):
     masked_props = ["ws_user_key", "user_key"]
     prop_list = [obj_title] if obj_title else []
@@ -61,7 +67,7 @@ def log_obj_props(obj, obj_title=""):
             prop_list.append(f'{k}={v}')
         logger.debug("\n\t".join(prop_list))
     except Exception as err:
-        logger.error(f'[{fn()}] Failed: {err}')
+        logger.error(f'[{ex()}] Failed: {err}')
 
 
 def parse_args():
@@ -184,16 +190,17 @@ def csv_to_json(csv_file):
             }
             dep.append(pck)
     except Exception as err:
-        logger.error(f'[{fn()}] Failed to convert CSV to JSON: {err}')
+        logger.error(f'[{ex()}] Failed to convert CSV to JSON: {err}')
 
     return dep
 
 
 def call_api(header, data, agent=False, method="POST", agent_info_login=False):
     res = ""
-    data["agentInfo"] = AGENT_INFO
-    if agent_info_login:
-        data["agentInfo"]["agent"] = AGENT_INFO["agent"].replace("ps-", "ps-login-")
+    if not agent:
+        data["agentInfo"] = AGENT_INFO
+        if agent_info_login:
+            data["agentInfo"]["agent"] = AGENT_INFO["agent"].replace("ps-", "ps-login-")
 
     try:
         proxy = analyze_proxy(args.proxy) if args.proxy else ""
@@ -205,7 +212,7 @@ def call_api(header, data, agent=False, method="POST", agent_info_login=False):
             headers=header,
             proxies=proxies).text
     except Exception as err:
-        logger.debug(f'[{fn()}] {err}')
+        logger.debug(f'[{ex()}] {err}')
     return res
 
 
@@ -306,7 +313,7 @@ def create_body(args):
                     error_code = lib_lst["errorCode"]
                     error_msg = lib_lst["errorMessage"]
         except Exception as err:
-            logger.error(f'[{fn()}] {str(err)}')
+            logger.error(f'[{ex()}] {str(err)}')
             exit(-1)  # In this case don't need to continue execution
         logger.debug(f'[{fn()}] Result: sha1={sha1}, libname={lname}, error_code={error_code}, error_msg={error_msg}')
         return sha1, lname, error_code, error_msg
@@ -353,7 +360,7 @@ def create_body(args):
             prj_id = try_or_error(lambda: sbom["name"], '') if (not prj_id) else prj_id
             logger.debug(f'[{fn()}] prj_id: {prj_id}')
     except Exception as err:
-        logger.error(f'[{fn()}] Unable to parse input file: {err}')
+        logger.error(f'[{ex()}] Unable to parse input file: {err}')
         exit(-1)
 
     if not prj_id:
@@ -366,7 +373,7 @@ def create_body(args):
             if rel_['relationshipType'] == "DEPENDS_ON":
                 relations.append({rel_['spdxElementId']: rel_['relatedSpdxElement']})
     except Exception as err:
-        logger.debug(f'[{fn()}] "relationships" block not found, skipping')
+        logger.debug(f'[{ex()}] "relationships" block not found, skipping')
 
     pkgs = try_or_error(lambda: sbom["packages"], sbom)  # from JSON or from CSV
     logger.debug(f'[{fn()}] Adding dependencies')
@@ -576,9 +583,9 @@ def upload_to_mend(upload):
         else:
             logger.debug(f'[{fn()}] Uploading project:  {upload_projects[0]}')
 
-        data = f'type=UPDATE&updateType={args.update_type}&agent={AGENT_INFO["agent"]}&' \
-               f'agentVersion={AGENT_INFO["agentVersion"]}&token={args.ws_token}&userKey={args.ws_user_key}&' \
-               f'product={args.ws_product}&timeStamp={ts}&diff={json_prj}'
+        data = f"type=UPDATE&updateType={args.update_type}&agent={AGENT_INFO['agent']}&" \
+               f"agentVersion={AGENT_INFO['agentVersion']}&token={args.ws_token}&userKey={args.ws_user_key}&" \
+               f"product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         header = {'Content-Type': 'application/x-www-form-urlencoded'}
         data = json.loads(call_api(header=header, data=data, agent=True))
 
@@ -590,7 +597,7 @@ def upload_to_mend(upload):
         else:
             logger.error(f"Mend update request failed: {data['message']} ({data['data']})")
     except Exception as err:
-        logger.error(f"Upload failed: {err}")
+        logger.error(f"[{ex()}] Upload failed: {err}")
     return ret
 
 
@@ -663,7 +670,7 @@ def main():
                 try:
                     os.mkdir(args.out_dir)
                 except Exception as err:
-                    logger.error(f'[{fn()}] {err}')
+                    logger.error(f'[{ex()}] {err}')
                     exit(-1)
 
             logger.info(f'[{fn()}] Generating update request')
@@ -680,7 +687,7 @@ def main():
                 json.dump(output_json, outfile, indent=4)
             logger.info(f'[{fn()}] Update request created successfully: {full_path}')
     except Exception as err:
-        logger.error(f'[{fn()}] Failed to create update request file: {err}')
+        logger.error(f'[{ex()}] Failed to create update request file: {err}')
         exit(-1)
 
     try:
@@ -710,7 +717,7 @@ def main():
                 logger.debug(f'[{fn()}] Request token: {res_upload["requestToken"]}')
 
     except Exception as err:
-        logger.error(f"Upload failed: {err}")
+        logger.error(f"[{ex()}] Upload failed: {err}")
         exit(-1)
 
 
