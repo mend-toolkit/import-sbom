@@ -9,7 +9,6 @@ import sys
 import re
 import hashlib
 import requests
-import traceback
 
 from mend_import_sbom._version import __version__, __tool_name__, __description__
 from mend_import_sbom.import_const import SHA1CalcType, aliases, varenvs, Templates
