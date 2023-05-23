@@ -18,4 +18,5 @@ def test_create_body(project):
 
 
 if __name__ == '__main__':
+    print(f'Working directory: {os.getcwd()}')
     pytest.main()
