@@ -7,7 +7,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(
                   os.path.dirname(__file__),
                   os.pardir)
 )
-
+print(f'Working directory: {os.getcwd()}')
 sys.path.append(PROJECT_ROOT)
 from mend_import_sbom import import_sbom
 
@@ -18,5 +18,4 @@ def test_create_body(project):
 
 
 if __name__ == '__main__':
-    print(f'Working directory: {os.getcwd()}')
     pytest.main()
