@@ -582,7 +582,7 @@ def upload_to_mend(upload):
         else:
             logger.debug(f'[{fn()}] Uploading project:  {upload_projects[0]}')
 
-        data = f"type=UPDATE&updateType={args.update_type}&agentInfo={AGENT_INFO['agent']}&" \
+        data = f"type=UPDATE&updateType={args.update_type}&agent={AGENT_INFO['agent']}&" \
                f"agentVersion={AGENT_INFO['agentVersion']}&token={args.ws_token}&userKey={args.ws_user_key}&" \
                f"product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         header = {'Content-Type': 'application/x-www-form-urlencoded'}
