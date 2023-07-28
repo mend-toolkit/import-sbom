@@ -1,7 +1,8 @@
 from enum import Enum
 import os
 
-class aliases(Enum): # List of aliases for params
+
+class aliases(Enum):  # List of aliases for params
     apikey = ("--apiKey","--api-key","--orgToken")
     userkey = ("--user-key","--userKey")
     projectkey = ("--scope","--projectToken")
@@ -9,6 +10,7 @@ class aliases(Enum): # List of aliases for params
     url = ("--url","--mendUrl")
     output = ("--out","--dir")
     sbom = ("--sbom","--input")
+    version = ("--version","-v")
 
     @classmethod
     def get_aliases_str(cls, key):
@@ -20,7 +22,7 @@ class aliases(Enum): # List of aliases for params
         return res
 
 
-class varenvs(Enum): # Lit of Env.variables
+class varenvs(Enum):  # Lit of Env.variables
     wsuserkey = ("WS_USERKEY", "MEND_USERKEY")
     wsapikey = ("MEND_APIKEY","WS_APIKEY","WS_TOKEN")
     wsurl = ("WS_WSS_URL","MEND_WSS_URL","WS_URL","MEND_URL")
@@ -37,31 +39,31 @@ class varenvs(Enum): # Lit of Env.variables
         return res
 
 
+class Templates(Enum):  # Specific patterns of lib name and version
+    # First element is pattern of delimiter in library name.
+    # Second item contains possible specific symbols in version info that should be removed
+    github = (":", "^")
+
+
 class SHA1CalcType(Enum):  # list with supported packages
-    # hackage = ("y","Cabal","cabal") #cabal
-    # gradle = ("y","JAVA","jar") #jar
-    # maven_1 = ("y","JAVA","war") #war
-    # gradle_1 = ("y","JAVA","war") #war
-    # cargo = ("n","Crate","crate") #crate
-    # opam = ("n","Opam","opam") #opam
-    maven = ("y", "JAVA", "jar", "maven")  # jar
-    pypi = ("n", "PYTHON", "whl", "pypi")  # whl
-    npm = ("y", "NPM", "js", "npm", "npm")  # js
-    cdnjs = ("y", "CDNJS", "js", "cdnjs")  # js
-    dotnet = ("y", "NUGET", "exe", ".net")  # exe
-    bower = ("y", "BOWER", "jar", "bower")  # jar
-    ocaml = ("n", "Opam", "ml", "ocaml")  # ml
-    go = ("n", "GO", "go", "go")  # go
-    nuget = ("y", "NUGET", "ng", "nuget")  # ng
-    rpm = ("n", "RPM", "rpm", "rpm")  # rpm
-    composer = ("n", "PHP", "php", "php")  # php
-    cocoapods = ("n", "CocoaPods", "pod", "cocoapods")
-    cran = ("n", "R", "r", "r")  # r
-    gem = ("y", "RUBY", "gem", "ruby")  # gem
-    rust = ("y", "RUST", "rs", "rust")  # rs
-    rlib = ("y", "RUST", "rlib", "rust")  # rlib
-    hex = ("y", "HEX", "hex", "hex", "hex")  # hex, h86
-    alpine = ("n", "Alpine", "apk", "alpine")
+    maven = ("y", "JAVA", "jar", "maven",1)  # jar
+    pypi = ("n", "PYTHON", "whl", "pypi",2)  # whl
+    npm = ("y", "NPM", "js", "npm",3)  # js
+    cdnjs = ("y", "CDNJS", "js", "cdnjs",4)  # js
+    dotnet = ("y", "NUGET", "exe", ".net",5)  # exe
+    bower = ("y", "BOWER", "jar", "bower",6)  # jar
+    ocaml = ("n", "Opam", "ml", "ocaml",7)  # ml
+    go = ("n", "GO", "go", "go",8)  # go
+    nuget = ("y", "NUGET", "ng", "nuget",9)  # ng
+    rpm = ("n", "RPM", "rpm", "rpm",10)  # rpm
+    composer = ("n", "PHP", "php", "php",11)  # php
+    cocoapods = ("n", "CocoaPods", "pod", "cocoapods",12)
+    cran = ("n", "R", "r", "cran",13)  # r
+    gem = ("y", "RUBY", "gem", "ruby",14)  # gem
+    rust = ("y", "RUST", "rs", "rust",15)  # rs
+    rlib = ("y", "RUST", "rlib", "rust",16)  # rlib
+    hex = ("y", "HEX", "hex", "hex",17)  # hex, h86
+    alpine = ("n", "Alpine", "apk", "alpine",18)
 
     @property
     def lower_case(self):
@@ -78,6 +80,19 @@ class SHA1CalcType(Enum):  # list with supported packages
     @property
     def libtype(self):
         return self.value[3]
+
+    @property
+    def order(self):
+        return self.value[4]
+
+    @classmethod
+    def get_el_by_name(cls, name: str):
+        res = None
+        for el_ in cls:
+            if el_.name == name:
+                res = el_
+                break
+        return res
 
     @classmethod
     def get_package_data(cls, lng: str):

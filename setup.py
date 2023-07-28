@@ -18,6 +18,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
+    install_requires=[line.strip() for line in open("requirements.txt").readlines()],
     python_requires='>=3.9',
     classifiers=[
         "Programming Language :: Python :: 3.9",

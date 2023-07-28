@@ -1,5 +1,6 @@
 from pytest import fixture
 from argparse import Namespace
+args = None
 
 
 def pytest_addoption(parser):
