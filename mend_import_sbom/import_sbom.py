@@ -26,12 +26,15 @@ logger.addHandler(s_handler)
 logger.propagate = False
 
 APP_TITLE = "Mend SBOM Importer"
-APP_VERSION = metadata.version(f'mend_{__tool_name__}') if metadata.version(f'mend_{__tool_name__}') else __version__
+try:
+    APP_VERSION = metadata.version(f'mend_{__tool_name__}') if metadata.version(f'mend_{__tool_name__}') else __version__
+except:
+    APP_VERSION = __version__
 API_VERSION = "1.4"
 DFLT_PRD_NAME = "Mend-Imports"
 UPDATE_REQUEST_FILE = "update-request.txt"
 PROJ_URL = '/Wss/WSS.html#!project;id='  # f'{WS_WSS_URL}/Wss/WSS.html#!project;id={PROJECT_ID}'
-AGENT_INFO = {"agent": f"{__tool_name__.replace('_', '-')}", "agentVersion": APP_VERSION}
+AGENT_INFO = {"agent": f"{__tool_name__.replace('_', '-') if 'ps' in __tool_name__ else 'ps-'+__tool_name__.replace('_', '-')}", "agentVersion": __version__}
 
 
 def try_or_error(supplier, msg):
@@ -197,10 +200,14 @@ def csv_to_json(csv_file):
 def call_api(header, data, agent=False, method="POST", agent_info_login=False):
     res = ""
     if not agent:
+        data = json.loads(data)
         data["agentInfo"] = AGENT_INFO
         if agent_info_login:
-            data["agentInfo"]["agent"] = AGENT_INFO["agent"].replace("ps-", "ps-login-")
+            data["agentInfo"]["agent"] = data["agentInfo"]["agent"].replace("ps-", "ps-login-")
+        else:
+            data["agentInfo"]["agent"] = data["agentInfo"]["agent"].replace("ps-login-", "ps-")
 
+        data = json.dumps(data)
     try:
         proxy = analyze_proxy(args.proxy) if args.proxy else ""
         proxies = {"https": f"http://{proxy}", "http": f"http://{proxy}"} if proxy else {}
@@ -381,6 +388,7 @@ def create_body(args):
         if "Tool:" in create_:
             creator = create_
     for package in pkgs:
+        pck = {}
         pkg_type_creator = get_lang_data(creator)  # Get info about possible package type from creator info
         algorithm = try_or_error(lambda: f"{package['checksums'][0]['algorithm']}", '')
         sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}",
@@ -575,15 +583,21 @@ def upload_to_mend(upload):
     ret = None
     try:
         json_prj = json.dumps(upload['projects'])  # API understands just JSON Array type, not simple List
-        upload_projects = [proj["coordinates"]["artifactId"] for proj in upload["projects"]]
+        upload_projects = [try_or_error(lambda: proj["coordinates"]["artifactId"], try_or_error(lambda: proj["projectToken"], "")) for proj in upload["projects"]]
         if len(upload_projects) > 1:
             proj_txt = "\n  ".join(upload_projects)
             logger.debug(f'[{fn()}] Uploading projects:\n  {proj_txt}')
         else:
             logger.debug(f'[{fn()}] Uploading project:  {upload_projects[0]}')
-
+        '''
         data = f"type=UPDATE&updateType={args.update_type}&agent={AGENT_INFO['agent']}&" \
                f"agentVersion={AGENT_INFO['agentVersion']}&token={args.ws_token}&userKey={args.ws_user_key}&" \
+               f"product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
+               
+               The different Agent names and versions are not acceptable for current API 1.4 method
+        '''
+        data = f"type=UPDATE&updateType={args.update_type}&agent=fs-agent&" \
+               f"agentVersion=''&token={args.ws_token}&userKey={args.ws_user_key}&" \
                f"product={args.ws_product}&timeStamp={ts}&diff={json_prj}"
         header = {'Content-Type': 'application/x-www-form-urlencoded'}
         data = json.loads(call_api(header=header, data=data, agent=True))
@@ -658,8 +672,16 @@ def main():
             hdr_title = f'{APP_TITLE} {AGENT_INFO["agentVersion"]}'
             hdr = f'\n{len(hdr_title) * "="}\n{hdr_title}\n{len(hdr_title) * "="}'
             logger.info(hdr)
-
             log_obj_props(args, "Configuration:")
+            data = json.dumps(
+                {
+                    "requestType": "getOrganizationDetails",
+                    "orgToken": args.ws_token ,
+                    "userKey": args.ws_user_key
+            }
+            )
+            call_api(header={"Content-Type": "application/json"}, data = data)
+
             if not os.path.isfile(args.sbom):
                 logger.error(f'[{fn()}] Input file does not exist: {args.out_dir}')
                 exit(-1)
