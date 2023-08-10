@@ -26,7 +26,10 @@ logger.addHandler(s_handler)
 logger.propagate = False
 
 APP_TITLE = "Mend SBOM Importer"
-APP_VERSION = metadata.version(f'mend_{__tool_name__}') if metadata.version(f'mend_{__tool_name__}') else __version__
+try:
+    APP_VERSION = metadata.version(f'mend_{__tool_name__}') if metadata.version(f'mend_{__tool_name__}') else __version__
+except:
+    APP_VERSION = __version__
 API_VERSION = "1.4"
 DFLT_PRD_NAME = "Mend-Imports"
 UPDATE_REQUEST_FILE = "update-request.txt"
@@ -197,10 +200,11 @@ def csv_to_json(csv_file):
 def call_api(header, data, agent=False, method="POST", agent_info_login=False):
     res = ""
     if not agent:
+        data = json.loads(data)
         data["agentInfo"] = AGENT_INFO
         if agent_info_login:
             data["agentInfo"]["agent"] = AGENT_INFO["agent"].replace("ps-", "ps-login-")
-
+        data = json.dumps(data)
     try:
         proxy = analyze_proxy(args.proxy) if args.proxy else ""
         proxies = {"https": f"http://{proxy}", "http": f"http://{proxy}"} if proxy else {}
@@ -381,6 +385,7 @@ def create_body(args):
         if "Tool:" in create_:
             creator = create_
     for package in pkgs:
+        pck = {}
         pkg_type_creator = get_lang_data(creator)  # Get info about possible package type from creator info
         algorithm = try_or_error(lambda: f"{package['checksums'][0]['algorithm']}", '')
         sha1 = try_or_error(lambda: f"{package['checksums'][0]['checksumValue']}",
