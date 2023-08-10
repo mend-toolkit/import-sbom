@@ -672,8 +672,16 @@ def main():
             hdr_title = f'{APP_TITLE} {AGENT_INFO["agentVersion"]}'
             hdr = f'\n{len(hdr_title) * "="}\n{hdr_title}\n{len(hdr_title) * "="}'
             logger.info(hdr)
-
             log_obj_props(args, "Configuration:")
+            data = json.dumps(
+                {
+                    "requestType": "getOrganizationDetails",
+                    "orgToken": args.ws_token ,
+                    "userKey": args.ws_user_key
+            }
+            )
+            call_api(header={"Content-Type": "application/json"}, data = data)
+
             if not os.path.isfile(args.sbom):
                 logger.error(f'[{fn()}] Input file does not exist: {args.out_dir}')
                 exit(-1)
