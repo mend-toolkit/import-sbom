@@ -125,19 +125,20 @@ def get_element_by_spdxid(spdx: str) -> dict:
             sha1 = try_or_error(lambda: f"{el_['checksums'][0]['checksumValue']}", '')
             chld = try_or_error(lambda: el_['children'], [])
             try:
-                out_el = {
-                    "artifactId": f"{el_['packageFileName']}",
-                    "version": f"{try_or_error(lambda: el_['versionInfo'], '')}",
-                    "sha1": sha1,
-                    "systemPath": "",
-                    "optional": False,
-                    "filename": f"{el_['packageFileName']}",
-                    "checksums": {
-                        "SHA1": sha1
-                    },
-                    "dependencyFile": "",
-                    "children": chld
-                }
+                if sha1:
+                    out_el = {
+                        "artifactId": f"{el_['packageFileName']}",
+                        "version": f"{try_or_error(lambda: el_['versionInfo'], '')}",
+                        "sha1": sha1,
+                        "systemPath": "",
+                        "optional": False,
+                        "filename": f"{el_['packageFileName']}",
+                        "checksums": {
+                            "SHA1": sha1
+                        },
+                        "dependencyFile": "",
+                        "children": chld
+                    }
             except:
                 pass
             break
@@ -151,13 +152,14 @@ def add_child(element: dict) -> dict:  # recursion for adding children
         for key, value in rel.items():
             if key == 'SPDXRef-PACKAGE-' + name:
                 chld_el = get_element_by_spdxid(value)
-                try:
-                    new_el['children'].append(chld_el)
-                except:
-                    new_el['children'] = [chld_el]
-                if not chld_el['artifactId'] in added_el:
-                    added_el.append(chld_el['artifactId'])
-                    add_child(chld_el)
+                if chld_el:
+                    try:
+                        new_el['children'].append(chld_el)
+                    except:
+                        new_el['children'] = [chld_el]
+                    if not chld_el['artifactId'] in added_el:
+                        added_el.append(chld_el['artifactId'])
+                        add_child(chld_el)
     return new_el
 
 
@@ -489,7 +491,7 @@ def create_body(args):
                     pkg_top = key
                     break
             if sha1_ == "" and pkg_name != "NOASSERTION":
-                logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else err_msg_}")
+                logger.info(f"Library not found: {pkg_id}. {res_err_msg if res_err_msg else try_or_error(lambda: err_msg_,'')}")
 
         if pck != {}:
             if pkg_name not in added_el:
