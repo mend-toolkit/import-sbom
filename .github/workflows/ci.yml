@@ -74,7 +74,7 @@ jobs:
           echo "PKG_NAME=${{ env.APP_NAME }}-${pkgVersion}" >> $GITHUB_ENV
           echo "WHL_NAME=${{ env.APP_NAME }}-${pkgVersion}-py3-none-any.whl" >> $GITHUB_ENV
       
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Get Source Branch
         id: get_source_branch
         run: |
