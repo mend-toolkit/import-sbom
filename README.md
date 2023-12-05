@@ -1,3 +1,6 @@
+> [!Warning]  
+**This tool was created as a tech preview, and due to current limitations in the product does NOT provide a complete inventory upon import.  SBOM import functionality will be added to the product in 2024.**
+>
 [![Logo](https://resources.mend.io/mend-sig/logo/mend-dark-logo-horizontal.png)](https://www.mend.io/)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-yellowgreen.svg)](https://opensource.org/licenses/Apache-2.0)
